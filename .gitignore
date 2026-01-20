@@ -29,4 +29,6 @@ __pycache__/
 *.png
 *.jpg
 *.jpeg
-*.gif
+*.gif__pycache__/
+*.pyc
+*.pyo
