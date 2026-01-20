@@ -1,0 +1,65 @@
+FugoToolbox/
+
+├── main.py                 # 入口脚本
+
+├── core/                   # 核心框架
+
+│   ├── __init__.py
+
+│   ├── app.py              # QApplication 封装
+
+│   ├── config.py           # 配置管理（JSON/YAML）
+
+│   ├── logger.py           # 日志系统
+
+│   ├── plugin_manager.py   # 插件加载器
+
+│   └── utils.py            # 通用工具函数
+
+│
+
+├── ui/                     # UI 相关
+
+│   ├── __init__.py
+
+│   ├── main_window.ui      # Qt Designer 生成的 .ui 文件（可选）
+
+│   ├── main_window.py      # 主窗口逻辑（继承 QMainWindow）
+
+│   └── widgets/            # 自定义控件（如日志面板、工具卡片等）
+
+│
+
+├── plugins/                # 插件目录（每个工具一个子目录）
+
+│   ├── __init__.py
+
+│   ├── base_plugin.py      # 抽象基类
+
+│   │
+
+│   ├── Basic_Block/     # 示例插件1：块式基础计算
+
+│   │   ├──__init__.py
+
+│   │   ├── widget.py       # 工具UI组件（QWidget）
+
+│   │   └── logic.py        # 业务逻辑
+
+│   │
+
+│   └── ...                 # 其他工具
+
+│
+
+├── resources/              # 资源文件
+
+│   ├── icons/              # 图标（.svg/.png）
+
+│   └── styles.qss          # 全局样式表（QSS）
+
+│
+
+├── tests/                  # 单元测试（可选）
+
+└── requirements.txt        # 依赖列表

@@ -1,0 +1,18 @@
+# 虚拟环境
+.venv/
+
+# 日志文件
+logs/
+
+# IDE配置文件
+.vscode/
+.idea/
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 构建产物
+build/
+dist/
+*.egg-info/
