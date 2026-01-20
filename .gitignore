@@ -16,3 +16,17 @@ Thumbs.db
 build/
 dist/
 *.egg-info/
+
+# Python编译文件
+__pycache__/
+*.pyc
+
+# 数据库文件
+*.db
+
+# 二进制文件
+*.mm
+*.png
+*.jpg
+*.jpeg
+*.gif
