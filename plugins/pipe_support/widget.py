@@ -277,12 +277,13 @@ class PipeSupportWidget(QWidget):
         
         outer_left_column.addLayout(plate_layout)
         
-        # 管墩形式输入组
-        pipe_support_form_group = QGroupBox("管墩形式")
+        # 其它参数输入组
+        pipe_support_form_group = QGroupBox("其它参数")
         pipe_support_form_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         # 设置组标题背景透明
         pipe_support_form_group.setStyleSheet("QGroupBox { background-color: transparent; }")
         pipe_support_form_layout = QHBoxLayout(pipe_support_form_group)
+        pipe_support_form_layout.setSpacing(20)  # 设置间距
         
         # 管墩形式选择
         self._pipe_support_type_layout = QHBoxLayout()
@@ -293,6 +294,16 @@ class PipeSupportWidget(QWidget):
         self._pipe_support_type_combo.setCurrentText("固定墩")
         self._pipe_support_type_layout.addWidget(self._pipe_support_type_combo)
         pipe_support_form_layout.addLayout(self._pipe_support_type_layout)
+        
+        # 是否考虑地下水选择
+        self._consider_groundwater_layout = QHBoxLayout()
+        self._consider_groundwater_layout.addWidget(QLabel("是否考虑地下水:"))
+        self._consider_groundwater_combo = QComboBox()
+        self._consider_groundwater_combo.addItems(["否", "是"])
+        # 默认选择否
+        self._consider_groundwater_combo.setCurrentText("否")
+        self._consider_groundwater_layout.addWidget(self._consider_groundwater_combo)
+        pipe_support_form_layout.addLayout(self._consider_groundwater_layout)
         
         # 创建管墩形式布局
         support_form_layout = QHBoxLayout()
@@ -658,6 +669,10 @@ class PipeSupportWidget(QWidget):
             base_top_width = float(self._base_top_width_edit.text()) if self._base_top_width_edit.text() else 0
             # 获取管墩形式
             pipe_support_type = self._pipe_support_type_combo.currentText()
+            # 获取地下水考虑选项
+            consider_groundwater = self._consider_groundwater_combo.currentText()
+            # 计算覆土重度：考虑地下水时为10 KN/m³，否则为18 KN/m³
+            soil_density = 10 if consider_groundwater == "是" else 18
             # 获取荷载参数
             upper_vertical_load = float(self._upper_vertical_load_edit.text()) if self._upper_vertical_load_edit.text() else 0
             upper_horizontal_load = float(self._upper_horizontal_load_edit.text()) if self._upper_horizontal_load_edit.text() else 0
@@ -705,10 +720,67 @@ class PipeSupportWidget(QWidget):
                 foundation_style,
                 base_column_length,
                 base_column_width,
-                base_plate_height
+                base_plate_height,
+                base_height_above_ground,
+                upper_horizontal_load,
+                consider_groundwater,
+                base_top_width
             )
             # 计算总基础的地基承载力验算（对于单个基础，结果相同）
-            is_bearing_satisfied, basic_weight, total_load, base_pressure, concrete_density = bearing_check_result_single
+            is_bearing_satisfied, basic_weight, soil_load, total_load, base_pressure, concrete_density, pkmax, pkmin, base_moment, section_modulus = bearing_check_result_single
+            
+            # 计算基底埋深：基础高度减去基础高出地面高度
+            depth = base_height - base_height_above_ground
+            # 计算地基承载力修正值
+            # 地基承载力修正值 = 地基承载力输入值 + 1 * 计算覆土重度 * (基础高度 - 基础高出地面高度 - 0.5)
+            bearing_capacity_corrected = bearing_capacity + 1 * soil_density * (depth - 0.5)
+            # 确保修正后的地基承载力不小于原始值
+            bearing_capacity_corrected = max(bearing_capacity_corrected, bearing_capacity)
+            
+            # 计算1.2倍的地基承载力修正值
+            bearing_capacity_corrected_12 = 1.2 * bearing_capacity_corrected
+            
+            # 综合判断地基承载力是否满足要求
+            if upper_horizontal_load == 0 or foundation_style != "T型基础":
+                # 当水平荷载为0或非T型基础时，只检查地基承载力
+                is_bearing_satisfied_final = is_bearing_satisfied
+                bearing_check_result = "✅ 满足要求" if is_bearing_satisfied else "❌ 不满足要求（平均压力超过地基承载力）"
+            else:
+                # 当水平荷载不为0且为T型基础时，检查所有条件
+                is_bearing_satisfied_final = is_bearing_satisfied and (pkmax <= bearing_capacity_corrected_12) and (pkmin >= 0)
+                # 生成判断结果信息
+                bearing_check_result = "✅ 满足要求"
+                if not is_bearing_satisfied:
+                    bearing_check_result = "❌ 不满足要求（平均压力超过地基承载力）"
+                elif pkmax > bearing_capacity_corrected_12:
+                    bearing_check_result = "❌ 不满足要求（最大压力超过1.2倍地基承载力修正值）"
+                elif pkmin <= 0:
+                    bearing_check_result = "⚠️ Pkmin<0，需要验算零应力区"
+            
+            # 计算抗倾覆（仅梯形基础）
+            overturning_check_result = None
+            is_overturning_satisfied = False
+            resisting_moment = 0
+            overturning_moment = 0
+            safety_factor = 0
+            overturning_total_vertical_load = 0
+            arm_length = 0
+            if foundation_style != "T型基础":
+                # 调用抗倾覆验算方法
+                overturning_check_result = self._logic.check_overturning(
+                    upper_vertical_load,
+                    upper_horizontal_load,
+                    base_length,
+                    base_bottom_width,
+                    base_height,
+                    foundation_style,
+                    base_column_length,
+                    base_column_width,
+                    base_plate_height,
+                    base_top_width
+                )
+                # 解包抗倾覆验算结果
+                is_overturning_satisfied, resisting_moment, overturning_moment, safety_factor, overturning_total_vertical_load, arm_length = overturning_check_result
             
             # 生成基础体积计算的HTML
             if foundation_style == "T型基础":
@@ -716,24 +788,24 @@ class PipeSupportWidget(QWidget):
                         <div class="formula">（一）单个基础体积：</div>
                         <div class="formula">底板体积：{base_length}m × {base_bottom_width}m × {base_plate_height}m</div>
                         <div class="formula">短柱体积：{base_column_length}m × {base_column_width}m × ({base_height}m - {base_plate_height}m)</div>
-                        <div class="formula-result">= {basic_volume_single:.4f} m³</div>
+                        <div class="formula-result">= {basic_volume_single:.3f} m³</div>
                 """
             else:
                 foundation_volume_html = f"""
                         <div class="formula">（一）单个基础体积：({base_bottom_width}m + {base_top_width}m) × {base_height}m / 2 × {base_length}m</div>
-                        <div class="formula-result">= {basic_volume_single:.4f} m³</div>
+                        <div class="formula-result">= {basic_volume_single:.3f} m³</div>
                 """
             
             # 生成垫层体积计算的HTML
             cushion_volume_html = f"""
                         <div class="formula">（一）单个基础垫层体积：({base_length}m + 2×0.1m) × ({base_bottom_width}m + 2×0.1m) × {cushion_thickness}m</div>
-                        <div class="formula-result">= {cushion_volume_single:.4f} m³</div>
+                        <div class="formula-result">= {cushion_volume_single:.3f} m³</div>
             """
             
             # 生成换填级配砂石体积计算的HTML
             replacement_volume_html = f"""
                         <div class="formula">（一）单个基础换填级配砂石体积：({base_length}m + 2 × {replacement_width}m) × ({base_bottom_width}m + 2 × {replacement_width}m) × {replacement_thickness}m</div>
-                        <div class="formula-result">= {replacement_volume_single:.4f} m³</div>
+                        <div class="formula-result">= {replacement_volume_single:.3f} m³</div>
             """
             
             # 生成基础防腐面积计算的HTML
@@ -742,8 +814,8 @@ class PipeSupportWidget(QWidget):
                         <div class="formula">（一）单个基础防腐面积</div>
                         <div class="formula">底板侧面积 = ({base_length}m + {base_bottom_width}m) × 2 × {base_plate_height}m</div>
                         <div class="formula">短柱侧面积 = ({base_column_length}m + {base_column_width}m) × 2 × ({depth}m - {base_plate_height}m)</div>
-                        <div class="formula">基底埋深 = {depth:.4f}m</div>
-                        <div class="formula-result">= {anticorrosion_area_single:.4f} m²</div>
+                        <div class="formula">基底埋深 = {depth:.3f}m</div>
+                        <div class="formula-result">= {anticorrosion_area_single:.3f} m²</div>
                 """
             else:
                 import math
@@ -752,8 +824,8 @@ class PipeSupportWidget(QWidget):
                         <div class="formula">（一）单个基础防腐面积</div>
                         <div class="formula">2个梯形侧面面积 = 2 × ({base_top_width}m + {base_bottom_width}m) × {depth}m / 2</div>
                         <div class="formula">2个矩形侧面面积 = 2 × √({depth}m² + (({base_bottom_width}m - {base_top_width}m)/2)²) × {base_length}m</div>
-                        <div class="formula">斜边长 = √({depth:.4f}² + {((base_bottom_width - base_top_width)/2):.4f}²) = {slant_height:.4f}m</div>
-                        <div class="formula-result">= {anticorrosion_area_single:.4f} m²</div>
+                        <div class="formula">斜边长 = √({depth:.3f}² + {((base_bottom_width - base_top_width)/2):.3f}²) = {slant_height:.3f}m</div>
+                        <div class="formula-result">= {anticorrosion_area_single:.3f} m²</div>
                 """
             
             # 格式化输出结果为HTML格式
@@ -817,12 +889,13 @@ class PipeSupportWidget(QWidget):
                 <div class="final-results">
                     <h2>最终计算结果</h2>
                     <table class="final-table">
-                        <tr><td class="result-label">基础体积</td><td class="result-value">{basic_volume:.4f} m³</td></tr>
-                        <tr><td class="result-label">垫层体积</td><td class="result-value">{cushion_volume:.4f} m³</td></tr>
-                        <tr><td class="result-label">换填级配砂石体积</td><td class="result-value">{replacement_volume:.4f} m³</td></tr>
-                        <tr><td class="result-label">钢材重量</td><td class="result-value">{steel_weight:.4f} t</td></tr>
-                        <tr><td class="result-label">基础防腐面积</td><td class="result-value">{anticorrosion_area:.4f} m²</td></tr>
-                        <tr><td class="result-label">地基承载力验算</td><td class="result-value">{'✅ 满足要求' if is_bearing_satisfied else '❌ 不满足要求'}</td></tr>
+                        <tr><td class="result-label">基础体积</td><td class="result-value">{basic_volume:.3f} m³</td></tr>
+                        <tr><td class="result-label">垫层体积</td><td class="result-value">{cushion_volume:.3f} m³</td></tr>
+                        <tr><td class="result-label">换填级配砂石体积</td><td class="result-value">{replacement_volume:.3f} m³</td></tr>
+                        <tr><td class="result-label">钢材重量</td><td class="result-value">{steel_weight:.3f} t</td></tr>
+                        <tr><td class="result-label">基础防腐面积</td><td class="result-value">{anticorrosion_area:.3f} m²</td></tr>
+                        <tr><td class="result-label">地基承载力验算</td><td class="result-value">{bearing_check_result}</td></tr>
+                        {('<tr><td class="result-label">抗倾覆验算</td><td class="result-value">' + ('✅ 满足要求' if is_overturning_satisfied else '❌ 不满足要求（安全系数小于1.6）') + '</td></tr>') if foundation_style != "T型基础" and overturning_check_result else ''}
                     </table>
                 </div>
                 
@@ -842,7 +915,7 @@ class PipeSupportWidget(QWidget):
                         </tr>
                         <tr>
                             <td class="param-item"><span class="param-label">基础高出地面高度：</span><span class="param-value">{base_height_above_ground}m</span></td>
-                            <td class="param-item"><span class="param-label">基底埋深：</span><span class="param-value">{depth:.4f}m</span></td>
+                            <td class="param-item"><span class="param-label">基底埋深：</span><span class="param-value">{depth:.3f}m</span></td>
                             <td class="param-item"><span class="param-label">垫层厚度：</span><span class="param-value">{float(self._cushion_thickness_edit.text()) if self._cushion_thickness_edit.text() else 0}mm</span></td>
                         </tr>
                         <tr>
@@ -855,8 +928,10 @@ class PipeSupportWidget(QWidget):
                             <td class="param-item"><span class="param-label">基础样式：</span><span class="param-value">{foundation_style}</span></td>
                             <td class="param-item"><span class="param-label">管墩形式：</span><span class="param-value">{pipe_support_type}</span></td>
                         </tr>                        <tr>
+                            <td class="param-item"><span class="param-label">是否考虑地下水：</span><span class="param-value">{consider_groundwater}</span></td>
                             <td class="param-item"><span class="param-label">上部垂直荷载：</span><span class="param-value">{upper_vertical_load}KN</span></td>
                             <td class="param-item"><span class="param-label">上部水平荷载：</span><span class="param-value">{upper_horizontal_load}KN</span></td>
+                        </tr>                        <tr>
                             <td class="param-item"><span class="param-label">地基承载力：</span><span class="param-value">{bearing_capacity}kPa</span></td>
                         </tr>                    </table>
                 </div>
@@ -868,59 +943,111 @@ class PipeSupportWidget(QWidget):
                     <div class="calculation">
                         <div class="formula">一、基础体积计算</div>
                         {foundation_volume_html}
-                        <div class="formula">（二）总基础体积：{basic_volume_single:.4f}m³ × {foundation_count}个</div>
-                        <div class="formula-result">= {basic_volume:.4f} m³</div>
+                        <div class="formula">（二）总基础体积：{basic_volume_single:.3f}m³ × {foundation_count}个</div>
+                        <div class="formula-result">= {basic_volume:.3f} m³</div>
                     </div>
                     
                     <div class="calculation">
                         <div class="formula">二、垫层体积计算</div>
                         {cushion_volume_html}
-                        <div class="formula">（二）总垫层体积：{cushion_volume_single:.4f}m³ × {foundation_count}个</div>
-                        <div class="formula-result">= {cushion_volume:.4f} m³</div>
+                        <div class="formula">（二）总垫层体积：{cushion_volume_single:.3f}m³ × {foundation_count}个</div>
+                        <div class="formula-result">= {cushion_volume:.3f} m³</div>
                     </div>
                     
                     <div class="calculation">
                         <div class="formula">三、换填级配砂石体积计算</div>
                         {replacement_volume_html}
-                        <div class="formula">（二）总换填级配砂石体积：{replacement_volume_single:.4f}m³ × {foundation_count}个</div>
-                        <div class="formula-result">= {replacement_volume:.4f} m³</div>
+                        <div class="formula">（二）总换填级配砂石体积：{replacement_volume_single:.3f}m³ × {foundation_count}个</div>
+                        <div class="formula-result">= {replacement_volume:.3f} m³</div>
                     </div>
                     
                     <div class="calculation">
                         <div class="formula">四、预埋钢板体积计算</div>
                         <div class="formula">（一）单个预埋钢板体积：{plate_length}m × {plate_width}m × {plate_thickness}mm</div>
-                        <div class="formula">= {plate_length}m × {plate_width}m × {plate_thickness/1000:.6f}m</div>
-                        <div class="formula-result">= {plate_volume_single:.6f} m³</div>
-                        <div class="formula">（二）总预埋钢板体积：{plate_volume_single:.6f}m³ × {foundation_count}个</div>
-                        <div class="formula-result">= {plate_volume:.4f} m³</div>
+                        <div class="formula">= {plate_length}m × {plate_width}m × {plate_thickness/1000:.3f}m</div>
+                        <div class="formula-result">= {plate_volume_single:.3f} m³</div>
+                        <div class="formula">（二）总预埋钢板体积：{plate_volume_single:.3f}m³ × {foundation_count}个</div>
+                        <div class="formula-result">= {plate_volume:.3f} m³</div>
                     </div>
                     
                     <div class="calculation">
                         <div class="formula">五、钢材重量计算</div>
-                        <div class="formula">（一）单个基础钢材重量：{plate_volume_single:.6f}m³ × 7850kg/m³</div>
-                        <div class="formula-result">= {steel_weight_kg_single:.2f} kg</div>
-                        <div class="formula-result">= {steel_weight_single:.4f} t</div>
-                        <div class="formula">（二）总钢材重量：{steel_weight_kg_single:.2f}kg × {foundation_count}个</div>
-                        <div class="formula-result">= {steel_weight_kg:.2f} kg</div>
-                        <div class="formula-result">= {steel_weight:.4f} t</div>
+                        <div class="formula">（一）单个基础钢材重量：{plate_volume_single:.3f}m³ × 7850kg/m³</div>
+                        <div class="formula-result">= {steel_weight_kg_single:.3f} kg</div>
+                        <div class="formula-result">= {steel_weight_single:.3f} t</div>
+                        <div class="formula">（二）总钢材重量：{steel_weight_kg_single:.3f}kg × {foundation_count}个</div>
+                        <div class="formula-result">= {steel_weight_kg:.3f} kg</div>
+                        <div class="formula-result">= {steel_weight:.3f} t</div>
                     </div>
                     
                     <div class="calculation">
                         <div class="formula">六、基础防腐面积计算</div>
                         {anticorrosion_area_html}
-                        <div class="formula">（二）总基础防腐面积：{anticorrosion_area_single:.4f}m² × {foundation_count}个</div>
-                        <div class="formula-result">= {anticorrosion_area:.4f} m²</div>
+                        <div class="formula">（二）总基础防腐面积：{anticorrosion_area_single:.3f}m² × {foundation_count}个</div>
+                        <div class="formula-result">= {anticorrosion_area:.3f} m²</div>
                     </div>
                     
                     <div class="calculation">
                         <div class="formula">七、地基承载力验算</div>
-                        <div class="formula">（一）基础体积：{base_length}m × {base_bottom_width}m × {base_height}m = {base_length * base_bottom_width * base_height:.4f} m³</div>
-                        <div class="formula">（二）基础自重：{base_length * base_bottom_width * base_height:.4f}m³ × {concrete_density}KN/m³ = {basic_weight:.2f} KN</div>
-                        <div class="formula">（三）总荷载：上部荷载 {upper_vertical_load}KN + 基础自重 {basic_weight:.2f}KN = {total_load:.2f} KN</div>
-                        <div class="formula">（四）基底面积：{base_length}m × {base_bottom_width}m = {base_length * base_bottom_width:.4f} m²</div>
-                        <div class="formula">（五）基底压力：{total_load:.2f}KN ÷ {base_length * base_bottom_width:.4f}m² = {base_pressure:.2f} kPa</div>
+                        <div class="formula">（一）基础体积：</div>
+                        <div class="formula">
+                            {f'底板体积：{base_length}m × {base_bottom_width}m × {base_plate_height}m = {base_length * base_bottom_width * base_plate_height:.3f} m³<br>短柱体积：{base_column_length}m × {base_column_width}m × ({base_height}m - {base_plate_height}m) = {base_column_length * base_column_width * (base_height - base_plate_height):.3f} m³<br>总体积：{base_length * base_bottom_width * base_plate_height:.3f}m³ + {base_column_length * base_column_width * (base_height - base_plate_height):.3f}m³ = {base_length * base_bottom_width * base_plate_height + base_column_length * base_column_width * (base_height - base_plate_height):.3f} m³' if foundation_style == "T型基础" else f'({base_bottom_width}m + {base_top_width}m) × {base_height}m / 2 × {base_length}m = {basic_volume_single:.3f} m³'}
+                        </div>
+                        <div class="formula">（二）基础自重：{basic_volume_single:.3f}m³ × {concrete_density}KN/m³ = {basic_weight:.3f} KN</div>
+                        {f'''
+                        <div class="formula">（三）覆土荷载：{soil_density}kN/m³ × ({base_length * base_bottom_width:.3f}m² - {base_column_length * base_column_width:.3f}m²) × ({base_height:.3f}m - {base_height_above_ground:.3f}m - {base_plate_height:.3f}m) = {soil_load:.3f} KN</div>
+                        <div class="formula">（四）总荷载：上部荷载 {upper_vertical_load}KN + 基础自重 {basic_weight:.3f}KN + 覆土荷载 {soil_load:.3f}KN = {total_load:.3f} KN</div>
+                        <div class="formula">（五）基底面积：{base_length}m × {base_bottom_width}m = {base_length * base_bottom_width:.3f} m²</div>
+                        <div class="formula">（六）基底压力：{total_load:.3f}KN ÷ {base_length * base_bottom_width:.3f}m² = {base_pressure:.3f} kPa</div>
+                        <div class="formula">（七）地基承载力：{bearing_capacity} kPa</div>
+                        <div class="formula">（八）验算结果：{'✅ 地基承载力满足要求' if is_bearing_satisfied else '❌ 地基承载力不满足要求'}</div>
+                        ''' if foundation_style == "T型基础" and soil_load > 0 else f'''
+                        <div class="formula">（三）总荷载：上部荷载 {upper_vertical_load}KN + 基础自重 {basic_weight:.3f}KN = {total_load:.3f} KN</div>
+                        <div class="formula">（四）基底面积：{base_length}m × {base_bottom_width}m = {base_length * base_bottom_width:.3f} m²</div>
+                        <div class="formula">（五）基底压力：{total_load:.3f}KN ÷ {base_length * base_bottom_width:.3f}m² = {base_pressure:.3f} kPa</div>
                         <div class="formula">（六）地基承载力：{bearing_capacity} kPa</div>
                         <div class="formula">（七）验算结果：{'✅ 地基承载力满足要求' if is_bearing_satisfied else '❌ 地基承载力不满足要求'}</div>
+                        '''}
+                        
+                        {f'''
+                        <div class="formula">（九）基底弯矩计算：</div>
+                        <div class="formula">水平荷载：{upper_horizontal_load} KN</div>
+                        <div class="formula">作用高度：{base_height} m</div>
+                        <div class="formula">基底弯矩 Mk = {upper_horizontal_load}KN × {base_height}m = {base_moment:.3f} kN·m</div>
+                        <div class="formula">（十）截面抵抗矩计算：</div>
+                        <div class="formula">底板长度：{base_length} m</div>
+                        <div class="formula">底板宽度：{base_bottom_width} m</div>
+                        <div class="formula">较长边尺寸：{max(base_length, base_bottom_width):.3f} m</div>
+                        <div class="formula">较短边尺寸：{min(base_length, base_bottom_width):.3f} m</div>
+                        <div class="formula">截面抵抗矩 W = ({min(base_length, base_bottom_width):.3f}m × {max(base_length, base_bottom_width):.3f}m²) / 6 = {section_modulus:.3f} m³</div>
+                        <div class="formula">（十一）基底压力计算：</div>
+                        <div class="formula">Pkmax = {total_load:.3f}/ {base_length * base_bottom_width:.3f} + {base_moment:.3f}/ {section_modulus:.3f}= {pkmax:.3f} kPa</div>
+                        <div class="formula">Pkmin = {total_load:.3f}/ {base_length * base_bottom_width:.3f} - {base_moment:.3f}/ {section_modulus:.3f}= {pkmin:.3f} kPa</div>
+                        
+                        <div class="formula">（十二）地基承载力修正：</div>
+                        <div class="formula">基底埋深：{depth:.3f} m</div>
+                        <div class="formula">计算覆土重度：{soil_density} kN/m³</div>
+                        <div class="formula">地基承载力修正值 = {bearing_capacity}kPa + 1 × {soil_density}kN/m³ × ({depth:.3f}m - 0.5m) = {bearing_capacity_corrected:.3f} kPa</div>
+                        <div class="formula">1.2 × 地基承载力修正值 = 1.2 × {bearing_capacity_corrected:.3f}kPa = {bearing_capacity_corrected_12:.3f} kPa</div>
+                        <div class="formula">（十三）最终验算：</div>
+                        <div class="formula">Pkmax = {pkmax:.3f} kPa {'≤' if pkmax <= bearing_capacity_corrected_12 else '>'} {bearing_capacity_corrected_12:.3f} kPa</div>
+                        <div class="formula">Pkmin = {pkmin:.3f} kPa {'>' if pkmin > 0 else '≤'} 0 kPa</div>
+                        ''' if foundation_style == "T型基础" and upper_horizontal_load > 0 else ''}
+                        <div class="formula">最终结果：{bearing_check_result}</div>
+                        
+                        # 仅在梯形基础时显示抗倾覆计算
+                        {f'''
+                        <div class="calculation">
+                            <div class="formula">八、抗倾覆验算</div>
+                            <div class="formula">（一）基础体积：{basic_volume_single:.3f} m³</div>
+                            <div class="formula">（二）基础自重：{basic_volume_single:.3f}m³ × {concrete_density}KN/m³ = {basic_weight:.3f} KN</div>
+                            <div class="formula">（三）总垂直荷载：上部荷载 {upper_vertical_load}KN + 基础自重 {basic_weight:.3f}KN = {overturning_total_vertical_load:.3f} KN</div>
+                            <div class="formula">（四）倾覆力矩：水平荷载 {upper_horizontal_load}KN × 作用高度 {base_height}m = {overturning_moment:.3f} kN·m</div>
+                            <div class="formula">（五）抗倾覆力矩：总垂直荷载 {overturning_total_vertical_load:.3f}KN × 力臂 {arm_length:.3f}m = {resisting_moment:.3f} kN·m</div>
+                            <div class="formula">（六）抗倾覆安全系数：{resisting_moment:.3f}kN·m / {overturning_moment:.3f}kN·m = {safety_factor:.3f}</div>
+                            <div class="formula">（七）抗倾覆验算结果：{'✅ 满足要求' if is_overturning_satisfied else '❌ 不满足要求（安全系数小于1.6）'}</div>
+                        </div>
+                        ''' if foundation_style != "T型基础" and overturning_check_result else ''}
                     </div>            </body>
             </html>"""            
             # 设置HTML结果
