@@ -1,6 +1,6 @@
 # FugoTools
 
-FugoTools是一个土木工程设计辅助工具集合，基于Python和PySide6开发，提供多种实用的工程计算和设计功能。
+FugoTools是一个土木工程设计辅助工具集合，主要用于石化行业常见构筑物的简单前期计算估料，基于Python和PySide6开发。
 
 ## 功能特点
 
@@ -13,33 +13,12 @@ FugoTools是一个土木工程设计辅助工具集合，基于Python和PySide6�
 ### 技术特点
 - 基于PySide6的现代化GUI界面
 - 插件化架构，易于扩展
-- 支持多语言（默认中文）
 - 详细的计算过程和结果展示
-- 安全系数验证和设计建议
-
-## 安装说明
 
 ### 环境要求
 - Python 3.8+
 - PySide6
 - 其他依赖包（见requirements.txt）
-
-### 安装步骤
-1. 克隆仓库：
-   ```bash
-   git clone https://github.com/axero117/FUGUTools.git
-   cd FUGUTools
-   ```
-
-2. 安装依赖：
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. 运行应用：
-   ```bash
-   python main.py
-   ```
 
 ## 使用方法
 1. 启动应用后，在主界面选择需要的工具插件
@@ -58,6 +37,3 @@ FugoTools是一个土木工程设计辅助工具集合，基于Python和PySide6�
 
 ## 许可证
 本项目采用MIT许可证。
-
-## 联系方式
-- GitHub: https://github.com/axero117/FUGUTools
