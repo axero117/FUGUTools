@@ -30,6 +30,9 @@ class PipeSupportWidget(QWidget):
         # 初始化业务逻辑
         self._logic = PipeSupportLogic()
         
+        # 初始化计算结果存储
+        self._calculation_results = {}
+        
         # 初始化UI
         self._init_ui()
         
@@ -1035,7 +1038,6 @@ class PipeSupportWidget(QWidget):
                         ''' if foundation_style == "T型基础" and upper_horizontal_load > 0 else ''}
                         <div class="formula">最终结果：{bearing_check_result}</div>
                         
-                        # 仅在梯形基础时显示抗倾覆计算
                         {f'''
                         <div class="calculation">
                             <div class="formula">八、抗倾覆验算</div>
@@ -1050,6 +1052,72 @@ class PipeSupportWidget(QWidget):
                         ''' if foundation_style != "T型基础" and overturning_check_result else ''}
                     </div>            </body>
             </html>"""            
+            # 存储计算结果到实例变量，供导出功能使用
+            self._calculation_results = {
+                # 输入参数
+                'base_length': base_length,
+                'base_bottom_width': base_bottom_width,
+                'base_column_length': base_column_length,
+                'base_column_width': base_column_width,
+                'base_top_width': base_top_width,
+                'base_height': base_height,
+                'base_height_above_ground': base_height_above_ground,
+                'depth': depth,
+                'cushion_thickness': cushion_thickness,
+                'replacement_thickness': replacement_thickness,
+                'replacement_width': replacement_width,
+                'foundation_count': foundation_count,
+                'plate_length': plate_length,
+                'plate_width': plate_width,
+                'plate_thickness': plate_thickness,
+                'foundation_style': foundation_style,
+                'pipe_support_type': pipe_support_type,
+                'consider_groundwater': consider_groundwater,
+                'upper_vertical_load': upper_vertical_load,
+                'upper_horizontal_load': upper_horizontal_load,
+                'bearing_capacity': bearing_capacity,
+                'base_plate_height': base_plate_height,
+                
+                # 单个基础计算结果
+                'basic_volume_single': basic_volume_single,
+                'cushion_volume_single': cushion_volume_single,
+                'replacement_volume_single': replacement_volume_single,
+                'steel_weight_single': steel_weight_single,
+                'anticorrosion_area_single': anticorrosion_area_single,
+                
+                # 总计算结果
+                'basic_volume': basic_volume,
+                'cushion_volume': cushion_volume,
+                'replacement_volume': replacement_volume,
+                'steel_weight': steel_weight,
+                'anticorrosion_area': anticorrosion_area,
+                
+                # 地基承载力验算结果
+                'is_bearing_satisfied': is_bearing_satisfied,
+                'is_bearing_satisfied_final': is_bearing_satisfied_final,
+                'basic_weight': basic_weight,
+                'soil_load': soil_load,
+                'total_load': total_load,
+                'base_pressure': base_pressure,
+                'concrete_density': concrete_density,
+                'pkmax': pkmax,
+                'pkmin': pkmin,
+                'base_moment': base_moment,
+                'section_modulus': section_modulus,
+                'bearing_capacity_corrected': bearing_capacity_corrected,
+                'bearing_capacity_corrected_12': bearing_capacity_corrected_12,
+                'bearing_check_result': bearing_check_result,
+                
+                # 抗倾覆验算结果（仅梯形基础）
+                'overturning_check_result': overturning_check_result,
+                'is_overturning_satisfied': is_overturning_satisfied,
+                'resisting_moment': resisting_moment,
+                'overturning_moment': overturning_moment,
+                'safety_factor': safety_factor,
+                'overturning_total_vertical_load': overturning_total_vertical_load,
+                'arm_length': arm_length
+            }
+            
             # 设置HTML结果
             self._result_text.setHtml(result_html)
         
@@ -1124,16 +1192,433 @@ class PipeSupportWidget(QWidget):
             self._result_text.setHtml(error_html)
     
     @Slot()
+    @Slot()
     def _on_export_triggered(self):
-        """导出计算书按钮点击事件"""
-        # 这里可以添加导出计算书的逻辑
-        pass
+        """处理导出计算书按钮的点击事件
+        
+        将计算结果导出为Word文档
+        """
+        # 检查是否有计算结果
+        if not self._result_text.toPlainText():
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "警告", "请先进行计算，获取计算结果后再导出计算书！")
+            return
+        
+        # 打开文件保存对话框
+        from PySide6.QtWidgets import QFileDialog
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "保存计算书",
+            "管墩计算书.docx",
+            "Word 文档 (*.docx);;所有文件 (*)"
+        )
+        
+        if not file_path:
+            return
+        
+        # 确保文件后缀为.docx
+        if not file_path.endswith('.docx'):
+            file_path += '.docx'
+        
+        # 使用python-docx库创建Word文档
+        try:
+            from docx import Document
+            from docx.shared import Inches, Pt, RGBColor
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
+            from docx.oxml.ns import qn
+            
+            # 创建文档
+            doc = Document()
+            
+            # 设置文档属性
+            doc.core_properties.title = "管墩计算书"
+            doc.core_properties.author = "符构工具箱"
+            
+            # 设置默认字体为宋体，黑色
+            for style in doc.styles:
+                if style.name == 'Normal':
+                    style.font.name = '宋体'
+                    style._element.rPr.rFonts.set(qn('w:eastAsia'), '宋体')
+                    style.font.size = Pt(12)
+                    style.font.color.rgb = RGBColor(0, 0, 0)  # 黑色
+                    break
+            
+            # 设置所有标题样式为黑色
+            for style_name in ['Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6']:
+                if style_name in doc.styles:
+                    heading_style = doc.styles[style_name]
+                    heading_style.font.color.rgb = RGBColor(0, 0, 0)  # 黑色
+            
+            # 添加标题
+            title = doc.add_heading("管墩计算书", 0)
+            title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            title_run = title.runs[0]
+            title_run.font.name = '宋体'
+            title_run._element.rPr.rFonts.set(qn('w:eastAsia'), '宋体')
+            title_run.font.size = Pt(24)
+            title_run.font.color.rgb = RGBColor(0, 0, 0)  # 黑色
+            
+            # 添加日期
+            import datetime
+            today = datetime.datetime.now().strftime("%Y年%m月%d日")
+            date_paragraph = doc.add_paragraph(f"计算日期：{today}")
+            date_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            date_paragraph.paragraph_format.space_after = Pt(12)
+            # 设置日期字体为黑色
+            for run in date_paragraph.runs:
+                run.font.color.rgb = RGBColor(0, 0, 0)  # 黑色
+            
+            # 重新执行计算，确保获取最新结果
+            self._on_calculate_clicked()
+            
+            # 从存储的计算结果中获取数据
+            results = self._calculation_results
+            
+            # 创建Word文档内容
+            
+            # 1. 添加输入参数标题
+            doc.add_heading("一、输入参数", level=1)
+            
+            # 添加输入参数表格
+            param_doc_table = doc.add_table(rows=0, cols=3)
+            param_doc_table.style = 'Table Grid'
+            
+            # 设置表格列宽
+            for col in param_doc_table.columns:
+                col.width = Inches(2.0)
+            
+            # 添加输入参数行
+            param_rows = [
+                [f"底板长度：{results['base_length']}m", f"底板宽度：{results['base_bottom_width']}m", f"基础短柱长度：{results['base_column_length']}m"],
+                [f"基础短柱宽度：{results['base_column_width']}m", f"基础顶面宽度：{results['base_top_width']}m", f"基础高度：{results['base_height']}m"],
+                [f"基础高出地面高度：{results['base_height_above_ground']}m", f"基底埋深：{results['depth']:.3f}m", f"垫层厚度：{float(self._cushion_thickness_edit.text()) if self._cushion_thickness_edit.text() else 0}mm"],
+                [f"换填厚度：{results['replacement_thickness']}m", f"换填宽度：{results['replacement_width']}m", f"基础数量：{results['foundation_count']}个"],
+                [f"预埋钢板：{results['plate_length']}m × {results['plate_width']}m × {results['plate_thickness']}mm", f"基础样式：{results['foundation_style']}", f"管墩形式：{results['pipe_support_type']}"],
+                [f"是否考虑地下水：{results['consider_groundwater']}", f"上部垂直荷载：{results['upper_vertical_load']}KN", f"上部水平荷载：{results['upper_horizontal_load']}KN"],
+                [f"地基承载力：{results['bearing_capacity']}kPa", "", ""]
+            ]
+            
+            for row_data in param_rows:
+                row_cells = param_doc_table.add_row().cells
+                for i, cell_data in enumerate(row_data):
+                    row_cells[i].text = cell_data
+            
+            # 2. 添加计算过程标题
+            heading = doc.add_heading("二、计算过程", level=1)
+            # 设置标题为黑色
+            for run in heading.runs:
+                run.font.color.rgb = RGBColor(0, 0, 0)  # 黑色
+            
+            # 添加计算过程
+            
+            # 辅助函数：设置段落为黑色
+            def set_paragraph_black(paragraph):
+                for run in paragraph.runs:
+                    run.font.color.rgb = RGBColor(0, 0, 0)  # 黑色
+            
+            # 基础体积计算
+            heading = doc.add_heading("1. 基础体积计算", level=2)
+            set_paragraph_black(heading)
+            if results['foundation_style'] == "T型基础":
+                p1 = doc.add_paragraph(f"（1）单个基础体积：")
+                set_paragraph_black(p1)
+                p2 = doc.add_paragraph(f"    底板体积：{results['base_length']}m × {results['base_bottom_width']}m × {results['base_plate_height']}m")
+                set_paragraph_black(p2)
+                p3 = doc.add_paragraph(f"    短柱体积：{results['base_column_length']}m × {results['base_column_width']}m × ({results['base_height']}m - {results['base_plate_height']}m)")
+                set_paragraph_black(p3)
+                p4 = doc.add_paragraph(f"    单个基础总体积：{results['basic_volume_single']:.3f} m³")
+                set_paragraph_black(p4)
+            else:
+                p1 = doc.add_paragraph(f"（1）单个基础体积：({results['base_bottom_width']}m + {results['base_top_width']}m) × {results['base_height']}m / 2 × {results['base_length']}m")
+                set_paragraph_black(p1)
+                p2 = doc.add_paragraph(f"    = {results['basic_volume_single']:.3f} m³")
+                set_paragraph_black(p2)
+            p5 = doc.add_paragraph(f"（2）总基础体积：{results['basic_volume_single']:.3f}m³ × {results['foundation_count']}个")
+            set_paragraph_black(p5)
+            p6 = doc.add_paragraph(f"    = {results['basic_volume']:.3f} m³")
+            set_paragraph_black(p6)
+            
+            # 垫层体积计算
+            heading = doc.add_heading("2. 垫层体积计算", level=2)
+            set_paragraph_black(heading)
+            p1 = doc.add_paragraph(f"（1）单个基础垫层体积：({results['base_length']}m + 2×0.1m) × ({results['base_bottom_width']}m + 2×0.1m) × {results['cushion_thickness']}m")
+            set_paragraph_black(p1)
+            p2 = doc.add_paragraph(f"    = {results['cushion_volume_single']:.3f} m³")
+            set_paragraph_black(p2)
+            p3 = doc.add_paragraph(f"（2）总垫层体积：{results['cushion_volume_single']:.3f}m³ × {results['foundation_count']}个")
+            set_paragraph_black(p3)
+            p4 = doc.add_paragraph(f"    = {results['cushion_volume']:.3f} m³")
+            set_paragraph_black(p4)
+            
+            # 换填级配砂石体积计算
+            heading = doc.add_heading("3. 换填级配砂石体积计算", level=2)
+            set_paragraph_black(heading)
+            p1 = doc.add_paragraph(f"（1）单个基础换填级配砂石体积：({results['base_length']}m + 2 × {results['replacement_width']}m) × ({results['base_bottom_width']}m + 2 × {results['replacement_width']}m) × {results['replacement_thickness']}m")
+            set_paragraph_black(p1)
+            p2 = doc.add_paragraph(f"    = {results['replacement_volume_single']:.3f} m³")
+            set_paragraph_black(p2)
+            p3 = doc.add_paragraph(f"（2）总换填级配砂石体积：{results['replacement_volume_single']:.3f}m³ × {results['foundation_count']}个")
+            set_paragraph_black(p3)
+            p4 = doc.add_paragraph(f"    = {results['replacement_volume']:.3f} m³")
+            set_paragraph_black(p4)
+            
+            # 钢材重量计算
+            heading = doc.add_heading("4. 钢材重量计算", level=2)
+            set_paragraph_black(heading)
+            p1 = doc.add_paragraph(f"（1）单个基础钢材重量：{results['steel_weight_single']:.3f} t")
+            set_paragraph_black(p1)
+            p2 = doc.add_paragraph(f"（2）总钢材重量：{results['steel_weight_single']:.3f}t × {results['foundation_count']}个")
+            set_paragraph_black(p2)
+            p3 = doc.add_paragraph(f"    = {results['steel_weight']:.3f} t")
+            set_paragraph_black(p3)
+            
+            # 基础防腐面积计算
+            heading = doc.add_heading("5. 基础防腐面积计算", level=2)
+            set_paragraph_black(heading)
+            if results['foundation_style'] == "T型基础":
+                p1 = doc.add_paragraph(f"（1）单个基础防腐面积：")
+                set_paragraph_black(p1)
+                p2 = doc.add_paragraph(f"    底板侧面积 = ({results['base_length']}m + {results['base_bottom_width']}m) × 2 × {results['base_plate_height']}m")
+                set_paragraph_black(p2)
+                p3 = doc.add_paragraph(f"    短柱侧面积 = ({results['base_column_length']}m + {results['base_column_width']}m) × 2 × ({results['depth']}m - {results['base_plate_height']}m)")
+                set_paragraph_black(p3)
+                p4 = doc.add_paragraph(f"    单个基础防腐面积 = {results['anticorrosion_area_single']:.3f} m²")
+                set_paragraph_black(p4)
+            else:
+                import math
+                slant_height = math.sqrt(results['depth'] ** 2 + ((results['base_bottom_width'] - results['base_top_width']) / 2) ** 2)
+                p1 = doc.add_paragraph(f"（1）单个基础防腐面积：")
+                set_paragraph_black(p1)
+                p2 = doc.add_paragraph(f"    2个梯形侧面面积 = 2 × ({results['base_top_width']}m + {results['base_bottom_width']}m) × {results['depth']}m / 2")
+                set_paragraph_black(p2)
+                p3 = doc.add_paragraph(f"    2个矩形侧面面积 = 2 × √({results['depth']}m² + (({results['base_bottom_width']}m - {results['base_top_width']}m)/2)²) × {results['base_length']}m")
+                set_paragraph_black(p3)
+                p4 = doc.add_paragraph(f"    斜边长 = √({results['depth']:.3f}² + {((results['base_bottom_width'] - results['base_top_width'])/2):.3f}²) = {slant_height:.3f}m")
+                set_paragraph_black(p4)
+                p5 = doc.add_paragraph(f"    单个基础防腐面积 = {results['anticorrosion_area_single']:.3f} m²")
+                set_paragraph_black(p5)
+            p6 = doc.add_paragraph(f"（2）总基础防腐面积：{results['anticorrosion_area_single']:.3f}m² × {results['foundation_count']}个")
+            set_paragraph_black(p6)
+            p7 = doc.add_paragraph(f"    = {results['anticorrosion_area']:.3f} m²")
+            set_paragraph_black(p7)
+            
+            # 地基承载力验算
+            heading = doc.add_heading("6. 地基承载力验算", level=2)
+            set_paragraph_black(heading)
+            p1 = doc.add_paragraph(f"（1）基础体积：{results['basic_volume_single']:.3f} m³")
+            set_paragraph_black(p1)
+            p2 = doc.add_paragraph(f"（2）基础自重：{results['basic_volume_single']:.3f}m³ × {results['concrete_density']}KN/m³ = {results['basic_weight']:.3f} KN")
+            set_paragraph_black(p2)
+            if results['foundation_style'] == "T型基础" and results['soil_load'] > 0:
+                p3 = doc.add_paragraph(f"（3）覆土荷载：{results['soil_load']:.3f} KN")
+                set_paragraph_black(p3)
+                p4 = doc.add_paragraph(f"（4）总荷载：上部荷载 {results['upper_vertical_load']}KN + 基础自重 {results['basic_weight']:.3f}KN + 覆土荷载 {results['soil_load']:.3f}KN = {results['total_load']:.3f} KN")
+                set_paragraph_black(p4)
+            else:
+                p3 = doc.add_paragraph(f"（3）总荷载：上部荷载 {results['upper_vertical_load']}KN + 基础自重 {results['basic_weight']:.3f}KN = {results['total_load']:.3f} KN")
+                set_paragraph_black(p3)
+            p5 = doc.add_paragraph(f"（4）基底面积：{results['base_length']}m × {results['base_bottom_width']}m = {results['base_length'] * results['base_bottom_width']:.3f} m²")
+            set_paragraph_black(p5)
+            p6 = doc.add_paragraph(f"（5）基底压力：{results['total_load']:.3f}KN ÷ {results['base_length'] * results['base_bottom_width']:.3f}m² = {results['base_pressure']:.3f} kPa")
+            set_paragraph_black(p6)
+            p7 = doc.add_paragraph(f"（6）地基承载力：{results['bearing_capacity']} kPa")
+            set_paragraph_black(p7)
+            p8 = doc.add_paragraph(f"（7）地基承载力修正值：{results['bearing_capacity_corrected']:.3f} kPa")
+            set_paragraph_black(p8)
+            p9 = doc.add_paragraph(f"（8）1.2倍地基承载力修正值：{results['bearing_capacity_corrected_12']:.3f} kPa")
+            set_paragraph_black(p9)
+            if results['foundation_style'] == "T型基础" and results['upper_horizontal_load'] != 0:
+                p10 = doc.add_paragraph(f"（9）Pkmax：{results['pkmax']:.3f} kPa")
+                set_paragraph_black(p10)
+                p11 = doc.add_paragraph(f"（10）Pkmin：{results['pkmin']:.3f} kPa")
+                set_paragraph_black(p11)
+            p12 = doc.add_paragraph(f"（11）验算结果：{results['bearing_check_result']}")
+            set_paragraph_black(p12)
+            
+            # 抗倾覆验算（仅梯形基础）
+            if results['foundation_style'] != "T型基础" and results['overturning_check_result']:
+                heading = doc.add_heading("7. 抗倾覆验算", level=2)
+                set_paragraph_black(heading)
+                p1 = doc.add_paragraph(f"（1）抗倾覆安全系数：{results['safety_factor']:.3f}")
+                set_paragraph_black(p1)
+                p2 = doc.add_paragraph(f"（2）验算结果：{'✅ 满足要求' if results['is_overturning_satisfied'] else '❌ 不满足要求（安全系数小于1.6）'}")
+                set_paragraph_black(p2)
+            
+            # 3. 添加最终计算结果
+            heading = doc.add_heading("三、最终计算结果", level=1)
+            set_paragraph_black(heading)
+            
+            # 添加最终结果表格
+            result_doc_table = doc.add_table(rows=0, cols=2)
+            result_doc_table.style = 'Table Grid'
+            
+            # 设置表格列宽
+            for col in result_doc_table.columns:
+                col.width = Inches(3.0)
+            
+            # 添加最终结果行
+            result_rows = [
+                ["基础体积", f"{results['basic_volume']:.3f} m³"],
+                ["垫层体积", f"{results['cushion_volume']:.3f} m³"],
+                ["换填级配砂石体积", f"{results['replacement_volume']:.3f} m³"],
+                ["钢材重量", f"{results['steel_weight']:.3f} t"],
+                ["基础防腐面积", f"{results['anticorrosion_area']:.3f} m²"],
+                ["地基承载力验算", results['bearing_check_result']]
+            ]
+            
+            if results['foundation_style'] != "T型基础" and results['overturning_check_result']:
+                result_rows.append(["抗倾覆验算", "✅ 满足要求" if results['is_overturning_satisfied'] else "❌ 不满足要求（安全系数小于1.6）"])
+            
+            for row_data in result_rows:
+                row_cells = result_doc_table.add_row().cells
+                for i, cell_data in enumerate(row_data):
+                    row_cells[i].text = cell_data
+            
+            # 保存文档
+            doc.save(file_path)
+            
+            # 提示保存成功，并添加打开文件按钮
+            from PySide6.QtWidgets import QMessageBox
+            msg_box = QMessageBox()
+            msg_box.setWindowTitle("成功")
+            msg_box.setText(f"计算书已成功保存到：\n{file_path}")
+            msg_box.setIcon(QMessageBox.Information)
+            msg_box.addButton("确定", QMessageBox.AcceptRole)
+            open_button = msg_box.addButton("打开文件", QMessageBox.ActionRole)
+            msg_box.exec_()
+            
+            # 处理用户选择
+            if msg_box.clickedButton() == open_button:
+                # 打开文件
+                import os
+                os.startfile(file_path)
+                
+        except Exception as e:
+            # 处理保存错误
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "错误", f"导出计算书时发生错误：\n{str(e)}")
     
     @Slot()
     def _on_export_material_triggered(self):
-        """导出料表按钮点击事件"""
-        # 这里可以添加导出料表的逻辑
-        pass
+        """导出料表按钮点击事件
+        
+        导出Excel文档，统计所有计算结果
+        """
+        # 检查是否有计算结果
+        if not self._result_text.toPlainText():
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "警告", "请先进行计算，获取计算结果后再导出料表！")
+            return
+        
+        # 打开文件保存对话框
+        from PySide6.QtWidgets import QFileDialog
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "导出料表",
+            "管墩计算料表.xlsx",
+            "Excel 文档 (*.xlsx);;所有文件 (*)"
+        )
+        
+        if not file_path:
+            return
+        
+        # 确保文件后缀为.xlsx
+        if not file_path.endswith('.xlsx'):
+            file_path += '.xlsx'
+        
+        # 使用pandas创建Excel文档
+        try:
+            import pandas as pd
+            
+            # 重新执行计算，确保获取最新结果
+            self._on_calculate_clicked()
+            
+            # 从存储的计算结果中获取数据
+            results = self._calculation_results
+            
+            # 创建Excel数据
+            data = {
+                '项目': [
+                    '基础体积',
+                    '垫层体积',
+                    '换填级配砂石体积',
+                    '钢材重量',
+                    '基础防腐面积'
+                ],
+                '单个基础': [
+                    f'{results["basic_volume_single"]:.3f}',
+                    f'{results["cushion_volume_single"]:.3f}',
+                    f'{results["replacement_volume_single"]:.3f}',
+                    f'{results["steel_weight_single"]:.3f}',
+                    f'{results["anticorrosion_area_single"]:.3f}'
+                ],
+                '基础个数': [
+                    results["foundation_count"],
+                    results["foundation_count"],
+                    results["foundation_count"],
+                    results["foundation_count"],
+                    results["foundation_count"]
+                ],
+                '总计': [
+                    f'{results["basic_volume"]:.3f}',
+                    f'{results["cushion_volume"]:.3f}',
+                    f'{results["replacement_volume"]:.3f}',
+                    f'{results["steel_weight"]:.3f}',
+                    f'{results["anticorrosion_area"]:.3f}'
+                ],
+                '总计单位': [
+                    'm³',
+                    'm³',
+                    'm³',
+                    't',
+                    'm²'
+                ]
+            }
+            
+            # 创建DataFrame
+            df = pd.DataFrame(data)
+            
+            # 创建Excel writer
+            with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+                # 写入数据到Sheet1
+                df.to_excel(writer, sheet_name='料表', index=False)
+                
+                # 获取工作表
+                worksheet = writer.sheets['料表']
+                
+                # 调整列宽
+                for column in worksheet.columns:
+                    max_length = 0
+                    column_letter = column[0].column_letter
+                    for cell in column:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except:
+                            pass
+                    adjusted_width = min(max_length + 2, 30)
+                    worksheet.column_dimensions[column_letter].width = adjusted_width
+            
+            # 提示保存成功，并添加打开文件按钮
+            from PySide6.QtWidgets import QMessageBox
+            msg_box = QMessageBox()
+            msg_box.setWindowTitle("成功")
+            msg_box.setText(f"料表已成功导出到：\n{file_path}")
+            msg_box.setIcon(QMessageBox.Information)
+            msg_box.addButton("确定", QMessageBox.AcceptRole)
+            open_button = msg_box.addButton("打开文件", QMessageBox.ActionRole)
+            msg_box.exec_()
+            
+            # 处理用户选择
+            if msg_box.clickedButton() == open_button:
+                # 打开文件
+                import os
+                os.startfile(file_path)
+                
+        except Exception as e:
+            # 处理保存错误
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "错误", f"导出料表时发生错误：\n{str(e)}")
     
     def reset(self):
         """重置插件UI到初始状态"""
