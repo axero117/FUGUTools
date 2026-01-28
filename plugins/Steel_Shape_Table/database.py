@@ -1,8 +1,10 @@
 """数据库操作模块"""
 
+from re import I
 import sqlite3
 import json
 import os
+from tkinter import W
 from typing import List, Optional
 from plugins.Steel_Shape_Table.models import SteelSection
 
@@ -19,37 +21,27 @@ class SectionDatabase:
         self._db_path = db_path
         self._cache = {}
         self._init_db()
-    
-    def _init_db(self):
-        """初始化数据库，创建表结构"""
-        # 确保数据库文件所在目录存在
-        os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
-        
-        with sqlite3.connect(self._db_path) as conn:
-            cursor = conn.cursor()
-            # 创建sections表
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS sections (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    shape_type TEXT NOT NULL,
-                    model TEXT NOT NULL,
-                    height REAL NOT NULL,
-                    width REAL NOT NULL,
-                    web_thickness REAL NOT NULL,
-                    flange_thickness REAL NOT NULL,
-                    area REAL NOT NULL,
-                    weight REAL NOT NULL,
-                    ix REAL NOT NULL,
-                    iy REAL NOT NULL,
-                    wx REAL NOT NULL,
-                    wy REAL NOT NULL,
-                    UNIQUE(shape_type, model)
-                )
-            ''')
-            conn.commit()
-        
+
         # 初始化缓存
         self._load_cache()
+
+    def _init_db(self):
+        """初始化数据库
+        
+        只做必要的初始化工作，不创建表结构
+        """
+        # 确保数据库文件所在目录存在
+        db_dir = os.path.dirname(self._db_path)
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir)
+        
+        # 测试数据库连接
+        try:
+            with sqlite3.connect(self._db_path) as conn:
+                # 简单执行一个查询来测试连接
+                conn.execute("SELECT 1")
+        except sqlite3.Error as e:
+            print(f"数据库连接测试失败: {e}")
     
     def _load_cache(self):
         """加载缓存"""
@@ -57,14 +49,14 @@ class SectionDatabase:
         shape_types = self.get_shape_types()
         for shape_type in shape_types:
             # 预加载每种类型的前100条数据到缓存
-            sections = self._get_sections_from_db(shape_type, limit=100)
+            sections = self.get_sections(shape_type, limit=100)
             self._cache[shape_type] = sections
-    
-    def _get_sections_from_db(self, shape_type: str, keyword: str = None, limit: int = None) -> List[SteelSection]:
-        """从数据库获取型钢截面数据
+
+    def _get_sections_from_h_sections_table(self, category: str, keyword: str = None, limit: int = None) -> List[SteelSection]:
+        """从h_sections_2017表获取型钢截面数据
         
         Args:
-            shape_type: 型钢类型
+            category: 型钢类别 (HW/HM/HN/HP等)
             keyword: 搜索关键词
             limit: 限制返回数量
             
@@ -76,12 +68,12 @@ class SectionDatabase:
             cursor = conn.cursor()
             
             # 构建查询语句
-            query = "SELECT * FROM sections WHERE shape_type = ?"
-            params = [shape_type]
+            query = "SELECT * FROM h_sections_2017 WHERE category = ?"
+            params = [category]
             
             # 添加关键词搜索
             if keyword:
-                query += " AND model LIKE ?"
+                query += " AND section_name LIKE ?"
                 params.append(f"%{keyword}%")
             
             # 添加限制
@@ -96,46 +88,422 @@ class SectionDatabase:
             sections = []
             for row in rows:
                 section = SteelSection(
-                    shape_type=row['shape_type'],
-                    model=row['model'],
+                    shape_type="H型钢截面表（2017）",  # 固定为H型钢截面表（2017）
+                    category=row['category'],  # 类别作为category
+                    model=row['section_name'],  # section_name作为model
                     height=row['height'],
                     width=row['width'],
                     web_thickness=row['web_thickness'],
                     flange_thickness=row['flange_thickness'],
+                    fillet_radius=row['fillet_radius'],  # 使用数据库中的圆角半径
                     area=row['area'],
                     weight=row['weight'],
-                    ix=row['ix'],
-                    iy=row['iy'],
-                    wx=row['wx'],
-                    wy=row['wy']
+                    surface_area=row['surface_area'],  # 使用数据库中的表面积
+                    Ix=row['Ix'],  # Ix对应数据库中的Ix列
+                    Iy=row['Iy'],  # Iy对应数据库中的Iy列
+                    ix=row['rx'],  # 惯性半径ix
+                    iy=row['ry'],  # 惯性半径iy
+                    Wx=row['Wx'],  # Wx对应数据库中的Wx列
+                    Wy=row['Wy']   # Wy对应数据库中的Wy列
+                )
+                sections.append(section)
+            
+            return sections
+            
+    def _get_sections_from_h_sections_2024_table(self, keyword: str = None, limit: int = None) -> List[SteelSection]:
+        """从h_sections_2024表获取型钢截面数据
+        
+        Args:
+            keyword: 搜索关键词
+            limit: 限制返回数量
+            
+        Returns:
+            List[SteelSection]: 型钢截面列表
+        """
+        with sqlite3.connect(self._db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # 构建查询语句
+            query = "SELECT * FROM h_sections_2024"
+            params = []
+            
+            # 添加关键词搜索
+            if keyword:
+                query += " WHERE section_name LIKE ?"
+                params.append(f"%{keyword}%")
+            
+            # 添加限制
+            if limit:
+                query += " LIMIT ?"
+                params.append(limit)
+            
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            
+            # 转换为SteelSection对象
+            sections = []
+            for row in rows:
+                section = SteelSection(
+                    shape_type="H型钢截面表（2024）",  # 统一使用"H型钢截面表（2024）"作为shape_type
+                    model=row['section_name'],  # section_name作为model
+                    height=row['height'],
+                    width=row['width'],
+                    web_thickness=row['web_thickness'],
+                    flange_thickness=row['flange_thickness'],
+                    fillet_radius=row['fillet_radius'],  # 使用数据库中的圆角半径
+                    area=row['area'],
+                    weight=row['weight'],
+                    surface_area=row['surface_area'],  # 使用数据库中的表面积
+                    Ix=row['Ix'],  # Ix对应数据库中的Ix列
+                    Iy=row['Iy'],  # Iy对应数据库中的Iy列
+                    ix=row['rx'],  # 惯性半径ix
+                    iy=row['ry'],  # 惯性半径iy
+                    Wx=row['Wx'],  # Wx对应数据库中的Wx列
+                    Wy=row['Wy']   # Wy对应数据库中的Wy列
+                )
+                sections.append(section)
+            
+            return sections
+            
+    def _get_sections_from_i_sections_2016_table(self, keyword: str = None, limit: int = None) -> List[SteelSection]:
+        """从i_sections_2016表获取型钢截面数据
+        
+        Args:
+            keyword: 搜索关键词
+            limit: 限制返回数量
+            
+        Returns:
+            List[SteelSection]: 型钢截面列表
+        """
+        with sqlite3.connect(self._db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # 构建查询语句
+            query = "SELECT * FROM i_sections_2016"
+            params = []
+            
+            # 添加关键词搜索
+            if keyword:
+                query += " WHERE section_name LIKE ?"
+                params.append(f"%{keyword}%")
+            
+            # 添加限制
+            if limit:
+                query += " LIMIT ?"
+                params.append(limit)
+            
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            
+            # 转换为SteelSection对象
+            sections = []
+            for row in rows:
+                section = SteelSection(
+                    shape_type="I型钢截面表（2016）",  # 统一使用"I型钢截面表（2016）"作为shape_type
+                    model=row['section_name'],  # section_name作为model
+                    height=row['height'],
+                    width=row['width'],
+                    web_thickness=row['web_thickness'],
+                    flange_thickness=row['flange_thickness'],
+                    inner_fillet_radius=row['inner_fillet_radius'],  # 内圆角半径
+                    round_radius=row['round_radius'],  # 使用数据库中的圆角半径
+                    area=row['area'],
+                    weight=row['weight'],
+                    surface_area=row['surface_area'],  # 使用数据库中的表面积
+                    Ix=row['Ix'],  # Ix对应数据库中的Ix列
+                    Iy=row['Iy'],  # Iy对应数据库中的Iy列
+                    ix=row['rx'],  # 惯性半径ix
+                    iy=row['ry'],  # 惯性半径iy
+                    Wx=row['Wx'],  # Wx对应数据库中的Wx列
+                    Wy=row['Wy']   # Wy对应数据库中的Wy列
+                )
+                sections.append(section)
+            
+            return sections
+            
+    def _get_sections_from_l_sections_2016_table(self, keyword: str = None, limit: int = None) -> List[SteelSection]:
+        """从L_sections_2016表获取型钢截面数据
+        
+        Args:
+            keyword: 搜索关键词
+            limit: 限制返回数量
+            
+        Returns:
+            List[SteelSection]: 型钢截面列表
+        """
+        with sqlite3.connect(self._db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # 构建查询语句
+            query = "SELECT * FROM L_sections_2016"
+            params = []
+            
+            # 添加关键词搜索
+            if keyword:
+                query += " WHERE section_name LIKE ?"
+                params.append(f"%{keyword}%")
+            
+            # 添加限制
+            if limit:
+                query += " LIMIT ?"
+                params.append(limit)
+            
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            
+            # 转换为SteelSection对象
+            sections = []
+            for row in rows:
+                section = SteelSection(
+                    shape_type="等边角钢截面表（2016）",  # 统一使用"等边角钢截面表（2016）"作为shape_type
+                    model=row['section_name'],  # section_name作为model
+                    side_width=row['side_width'],  # 边宽
+                    edge_thickness=row['edge_thickness'],  # 边厚
+                    round_radius=row['round_radius'],  # 使用数据库中的圆角半径
+                    area=row['area'],
+                    weight=row['weight'],
+                    surface_area=row['surface_area'],  # 使用数据库中的表面积
+                    Ix=row['Ix'],  # Ix对应数据库中的Ix列
+                    Ix1=row['IX1'],  # IX1对应数据库中的IX1
+                    Ix0=row['IX0'],  # IX0对应数据库中的IX0列    
+                    Iy0=row['Iy0'],  # Iy0对应数据库中的Iy0列
+                    ix=row['rx'],  # 惯性半径ix
+                    ix0=row['rx0'],  # 惯性半径ix0
+                    iy=row['ry0'],  # 惯性半径iy0
+                    Wx=row['Wx'],  # wx对应数据库中的Wx列
+                    Wy=row['Wy0'],  # wy对应数据库中的Wy0列
+                    Wx0=row['WX0'],  # wx0对应数据库中的WX0列
+                    Wy0=row['Wy0'],  # wy0对应数据库中的Wy0列
+                    Z0=row['Z0']   # z0对应数据库中的Z0列
+                )
+                sections.append(section)
+            
+            return sections
+            
+    def _get_sections_from_non_l_sections_2016_table(self, keyword: str = None, limit: int = None) -> List[SteelSection]:
+        """从non_L_sections_2016表获取型钢截面数据
+        
+        Args:
+            keyword: 搜索关键词
+            limit: 限制返回数量
+            
+        Returns:
+            List[SteelSection]: 型钢截面列表
+        """
+        with sqlite3.connect(self._db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # 构建查询语句
+            query = "SELECT * FROM non_L_sections_2016"
+            params = []
+            
+            # 添加关键词搜索
+            if keyword:
+                query += " WHERE section_name LIKE ?"
+                params.append(f"%{keyword}%")
+            
+            # 添加限制
+            if limit:
+                query += " LIMIT ?"
+                params.append(limit)
+            
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            
+            # 转换为SteelSection对象
+            sections = []
+            for row in rows:
+                section = SteelSection(
+                    shape_type="不等边角钢截面表（2016）",  # 统一使用"不等边角钢截面表（2016）"作为shape_type
+                    model=row['section_name'],  # section_name作为model
+                    long_side_width=row['long_side_width'],  # 使用长边宽
+                    short_side_width=row['short_side_width'],  # 使用短边宽
+                    edge_thickness=row['edge_thickness'],  # 边厚
+                    round_radius=row['round_radius'],  # 使用数据库中的圆角半径
+                    area=row['area'],
+                    weight=row['weight'],
+                    surface_area=row['surface_area'],  # 使用数据库中的表面积
+                    Ix=row['Ix'],  # Ix对应数据库中的Ix列
+                    Ix1=row['Ix1'],  # Ix1对应数据库中的Ix1列
+                    Iy=row['Iy'],  # Iy对应数据库中的Iy列
+                    Iy1=row['Iy1'],  # Iy1对应数据库中的Iy1列
+                    Iu=row['Iu'],  # Iu对应数据库中的Iu列
+                    ix=row['rx'],  # 惯性半径ix
+                    iy=row['ry'],  # 惯性半径iy
+                    iu=row['ru'],  # 惯性半径ru
+                    Wx=row['Wx'],  # wx对应数据库中的Wx列
+                    Wy=row['Wy'],  # wy对应数据库中的Wy列
+                    Wu=row['Wu'],  # Wu对应数据库中的Wu列
+                    tan_theta=row['tan_theta'],  # 截面主轴夹角正切值
+                )
+                sections.append(section)
+            
+            return sections
+            
+    def _get_sections_from_c_sections_2016_table(self, keyword: str = None, limit: int = None) -> List[SteelSection]:
+        """从c_sections_2016表获取型钢截面数据
+        
+        Args:
+            keyword: 搜索关键词
+            limit: 限制返回数量
+            
+        Returns:
+            List[SteelSection]: 型钢截面列表
+        """
+        with sqlite3.connect(self._db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # 构建查询语句
+            query = "SELECT * FROM c_sections_2016"
+            params = []
+            
+            # 添加关键词搜索
+            if keyword:
+                query += " WHERE section_name LIKE ?"
+                params.append(f"%{keyword}%")
+            
+            # 添加限制
+            if limit:
+                query += " LIMIT ?"
+                params.append(limit)
+            
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            
+            # 转换为SteelSection对象
+            sections = []
+            for row in rows:
+                section = SteelSection(
+                    shape_type="C型钢截面表（2016）",  # 统一使用"C型钢截面表（2016）"作为shape_type
+                    model=row['section_name'],  # section_name作为model
+                    height=row['height'],
+                    width=row['width'],
+                    web_thickness=row['web_thickness'],  # 使用腹板厚度
+                    flange_thickness=row['flange_thickness'],  # 使用翼缘厚度
+                    round_radius=row['round_radius'],  # 使用数据库中的圆角半径
+                    area=row['area'],
+                    weight=row['weight'],
+                    surface_area=row['surface_area'],  # 使用数据库中的表面积
+                    Ix=row['Ix'],  # Ix对应数据库中的Ix列
+                    Iy=row['Iy'],  # Iy对应数据库中的Iy列
+                    ix=row['rx'],  # 惯性半径rx
+                    iy=row['ry'],  # 惯性半径ry
+                    Wx=row['Wx'],  # wx对应数据库中的Wx列
+                    Wy=row['Wy']   # wy对应数据库中的Wy列
                 )
                 sections.append(section)
             
             return sections
     
-    def get_sections(self, shape_type: str, keyword: str = None) -> List[SteelSection]:
+    def get_sections(self, shape_type: str, keyword: str = None, limit: int = None) -> List[SteelSection]:
         """获取指定类型的型钢截面列表
         
         Args:
             shape_type: 型钢类型
             keyword: 搜索关键词
+            limit: 限制返回数量
             
         Returns:
             List[SteelSection]: 型钢截面列表
         """
-        # 检查是否有缓存且没有关键词搜索
-        if not keyword and shape_type in self._cache:
-            return self._cache[shape_type]
+        # 如果是H型钢2017系列，从h_sections_2017表获取数据
+        # 检查是否为H型钢截面表（2017）格式，例如 "HW型钢截面表（2017）"
+        if shape_type.endswith("型钢截面表（2017）"):
+            
+            # 检查是否有缓存且没有关键词搜索
+            if not keyword and shape_type in self._cache:
+                return self._cache[shape_type]
+            
+            # 从shape_type中提取类别（如从"HW型钢截面表（2017）"中提取"HW"）
+            category = shape_type.split("型钢截面表（2017）")[0]
+            
+            # 从h_sections_2017表获取
+            sections = self._get_sections_from_h_sections_table(category, keyword, limit)
+            
+            # 更新缓存（如果没有关键词搜索）
+            if not keyword:
+                self._cache[shape_type] = sections
+                
+            return sections
+        # 如果是H型钢2024系列，从h_sections_2024表获取数据
+        elif shape_type == "H型钢截面表（2024）":
+            # 检查是否有缓存且没有关键词搜索
+            if not keyword and shape_type in self._cache:
+                return self._cache[shape_type]
+            
+            # 从h_sections_2024表获取
+            sections = self._get_sections_from_h_sections_2024_table(keyword, limit)
+            
+            # 更新缓存（如果没有关键词搜索）
+            if not keyword:
+                self._cache[shape_type] = sections
+                
+            return sections
+        # 如果是I型钢2016系列，从i_sections_2016表获取数据
+        elif shape_type == "I型钢截面表（2016）":
+            # 检查是否有缓存且没有关键词搜索
+            if not keyword and shape_type in self._cache:
+                return self._cache[shape_type]
+            
+            # 从i_sections_2016表获取
+            sections = self._get_sections_from_i_sections_2016_table(keyword, limit)
+            
+            # 更新缓存（如果没有关键词搜索）
+            if not keyword:
+                self._cache[shape_type] = sections
+                
+            return sections
+        # 如果是等边角钢2016系列，从L_sections_2016表获取数据
+        elif shape_type == "等边角钢截面表（2016）":
+            # 检查是否有缓存且没有关键词搜索
+            if not keyword and shape_type in self._cache:
+                return self._cache[shape_type]
+            
+            # 从L_sections_2016表获取
+            sections = self._get_sections_from_l_sections_2016_table(keyword, limit)
+            
+            # 更新缓存（如果没有关键词搜索）
+            if not keyword:
+                self._cache[shape_type] = sections
+                
+            return sections
+        # 如果是不等边角钢2016系列，从non_L_sections_2016表获取数据
+        elif shape_type == "不等边角钢截面表（2016）":
+            # 检查是否有缓存且没有关键词搜索
+            if not keyword and shape_type in self._cache:
+                return self._cache[shape_type]
+            
+            # 从non_L_sections_2016表获取
+            sections = self._get_sections_from_non_l_sections_2016_table(keyword, limit)
+            
+            # 更新缓存（如果没有关键词搜索）
+            if not keyword:
+                self._cache[shape_type] = sections
+                
+            return sections
+        # 如果是C型钢2016系列，从c_sections_2016表获取数据
+        elif shape_type == "C型钢截面表（2016）":
+            # 检查是否有缓存且没有关键词搜索
+            if not keyword and shape_type in self._cache:
+                return self._cache[shape_type]
+            
+            # 从c_sections_2016表获取
+            sections = self._get_sections_from_c_sections_2016_table(keyword, limit)
+            
+            # 更新缓存（如果没有关键词搜索）
+            if not keyword:
+                self._cache[shape_type] = sections
+                
+            return sections
         
-        # 从数据库获取
-        sections = self._get_sections_from_db(shape_type, keyword)
-        
-        # 更新缓存（如果没有关键词搜索）
-        if not keyword:
-            self._cache[shape_type] = sections
-        
-        return sections
-    
+        # 默认返回空列表，确保总是返回可迭代对象
+        return []
+
     def get_shape_types(self) -> List[str]:
         """获取所有型钢类型
         
@@ -144,136 +512,36 @@ class SectionDatabase:
         """
         with sqlite3.connect(self._db_path) as conn:
             cursor = conn.cursor()
+            
+            # 从sections表获取类型
             cursor.execute("SELECT DISTINCT shape_type FROM sections")
             rows = cursor.fetchall()
-            return [row[0] for row in rows]
-    
-    def add_section(self, section: SteelSection) -> bool:
-        """添加型钢截面数据
-        
-        Args:
-            section: 型钢截面对象
+            types_from_sections = [row[0] for row in rows]
             
-        Returns:
-            bool: 是否添加成功
-        """
-        try:
-            with sqlite3.connect(self._db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT OR REPLACE INTO sections (
-                        shape_type, model, height, width, web_thickness, 
-                        flange_thickness, area, weight, ix, iy, wx, wy
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    section.shape_type, section.model, section.height, section.width, 
-                    section.web_thickness, section.flange_thickness, section.area, 
-                    section.weight, section.ix, section.iy, section.wx, section.wy
-                ))
-                conn.commit()
+            # 从h_sections_2017表获取类型
+            cursor.execute("SELECT DISTINCT category FROM h_sections_2017")
+            rows = cursor.fetchall()
+            types_from_h_sections = [f"{row[0]}型钢截面表（2017）" for row in rows]
             
-            # 更新缓存
-            if section.shape_type in self._cache:
-                # 检查是否已存在
-                existing = next((s for s in self._cache[section.shape_type] if s.model == section.model), None)
-                if existing:
-                    # 替换现有数据
-                    self._cache[section.shape_type].remove(existing)
-                self._cache[section.shape_type].append(section)
+            # 添加H型钢截面表（2024）类型
+            types_from_h_sections_2024 = ["H型钢截面表（2024）"]
             
-            return True
-        except Exception as e:
-            print(f"添加截面失败: {e}")
-            return False
-    
-    def add_sections(self, sections: List[SteelSection]) -> int:
-        """批量添加型钢截面数据
-        
-        Args:
-            sections: 型钢截面对象列表
+            # 添加I型钢截面表（2016）类型
+            types_from_i_sections_2016 = ["I型钢截面表（2016）"]
             
-        Returns:
-            int: 成功添加的数量
-        """
-        count = 0
-        with sqlite3.connect(self._db_path) as conn:
-            cursor = conn.cursor()
-            for section in sections:
-                try:
-                    cursor.execute('''
-                        INSERT OR REPLACE INTO sections (
-                            shape_type, model, height, width, web_thickness, 
-                            flange_thickness, area, weight, ix, iy, wx, wy
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        section.shape_type, section.model, section.height, section.width, 
-                        section.web_thickness, section.flange_thickness, section.area, 
-                        section.weight, section.ix, section.iy, section.wx, section.wy
-                    ))
-                    count += 1
-                except Exception as e:
-                    print(f"添加截面 {section.model} 失败: {e}")
-            conn.commit()
-        
-        # 清空缓存，下次查询时重新加载
-        self._cache.clear()
-        
-        return count
+            # 添加等边角钢截面表（2016）类型
+            types_from_l_sections_2016 = ["等边角钢截面表（2016）"]
+            
+            # 添加不等边角钢截面表（2016）类型
+            types_from_non_l_sections_2016 = ["不等边角钢截面表（2016）"]
+            
+            # 添加C型钢截面表（2016）类型
+            types_from_c_sections_2016 = ["C型钢截面表（2016）"]
+            
+            # 合并七个列表
+            all_types = types_from_sections + types_from_h_sections + types_from_h_sections_2024 + types_from_i_sections_2016 + types_from_l_sections_2016 + types_from_non_l_sections_2016 + types_from_c_sections_2016
+            return all_types
     
     def clear_cache(self):
         """清空缓存"""
         self._cache.clear()
-    
-    def backup_to_json(self, json_path: str) -> bool:
-        """备份数据库到JSON文件
-        
-        Args:
-            json_path: JSON文件路径
-            
-        Returns:
-            bool: 是否备份成功
-        """
-        try:
-            # 获取所有数据
-            all_sections = []
-            shape_types = self.get_shape_types()
-            for shape_type in shape_types:
-                sections = self.get_sections(shape_type)
-                all_sections.extend(sections)
-            
-            # 转换为字典列表
-            sections_dict = {
-                "sections": [section.to_dict() for section in all_sections]
-            }
-            
-            # 写入JSON文件
-            with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump(sections_dict, f, ensure_ascii=False, indent=2)
-            
-            return True
-        except Exception as e:
-            print(f"备份到JSON失败: {e}")
-            return False
-    
-    def restore_from_json(self, json_path: str) -> int:
-        """从JSON文件恢复数据库
-        
-        Args:
-            json_path: JSON文件路径
-            
-        Returns:
-            int: 成功恢复的数量
-        """
-        try:
-            # 读取JSON文件
-            with open(json_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            
-            # 转换为SteelSection对象
-            sections = [SteelSection.from_dict(section_dict) for section_dict in data.get('sections', [])]
-            
-            # 批量添加到数据库
-            return self.add_sections(sections)
-        except Exception as e:
-            print(f"从JSON恢复失败: {e}")
-            return 0

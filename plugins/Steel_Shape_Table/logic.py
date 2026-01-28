@@ -41,24 +41,11 @@ class SteelShapeLogic:
         """
         sections = self._db.get_sections(shape_type, keyword)
         
-        # 转换为字典列表，使用中文键名，便于UI使用
+        # 转换为字典列表，使用数据库列名作为键
         result = []
         for section in sections:
             section_dict = section.to_dict()
-            # 转换为中文键名
-            result.append({
-                "型号": section_dict["model"],
-                "高度H": section_dict["height"],
-                "宽度B": section_dict["width"],
-                "腹板厚度t1": section_dict["web_thickness"],
-                "翼缘厚度t2": section_dict["flange_thickness"],
-                "截面面积": section_dict["area"],
-                "理论重量": section_dict["weight"],
-                "惯性矩Ix": section_dict["ix"],
-                "惯性矩Iy": section_dict["iy"],
-                "截面模量Wx": section_dict["wx"],
-                "截面模量Wy": section_dict["wy"]
-            })
+            result.append(section_dict)
         return result
     
     def get_shape_types(self):
@@ -99,10 +86,15 @@ class SteelShapeLogic:
             "width": section_dict.get("宽度B"),
             "web_thickness": section_dict.get("腹板厚度t1"),
             "flange_thickness": section_dict.get("翼缘厚度t2"),
+            "fillet_radius": section_dict.get("圆角半径r"),
+            "inner_fillet_radius": section_dict.get("内圆角半径r'"),
             "area": section_dict.get("截面面积"),
             "weight": section_dict.get("理论重量"),
+            "surface_area": section_dict.get("表面积"),
             "ix": section_dict.get("惯性矩Ix"),
             "iy": section_dict.get("惯性矩Iy"),
+            "rx": section_dict.get("惯性半径rx"),
+            "ry": section_dict.get("惯性半径ry"),
             "wx": section_dict.get("截面模量Wx"),
             "wy": section_dict.get("截面模量Wy")
         }

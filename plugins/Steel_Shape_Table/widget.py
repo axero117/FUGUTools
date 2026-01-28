@@ -20,6 +20,7 @@ from PySide6.QtCore import Signal, Slot, Qt
 
 from plugins.Steel_Shape_Table.logic import SteelShapeLogic
 from plugins.Steel_Shape_Table.ui.section_diagram import SectionDiagram
+from plugins.Steel_Shape_Table.table_config import get_table_config
 
 
 class SteelShapeTableWidget(QWidget):
@@ -62,7 +63,7 @@ class SteelShapeTableWidget(QWidget):
         
         # 搜索和类型选择区域
         search_layout = QHBoxLayout()
-        search_layout.setSpacing(10)
+        search_layout.setSpacing(5)
         
         # 型钢类型选择
         type_label = QLabel("型钢类型：")
@@ -99,11 +100,12 @@ class SteelShapeTableWidget(QWidget):
         self._table_widget.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)  # 单选
         
         # 设置表格标题
-        self._table_widget.setColumnCount(11)
+        self._table_widget.setColumnCount(17)
         self._table_widget.setHorizontalHeaderLabels([
             "型号", "高度H(mm)", "宽度B(mm)", "腹板厚度t1(mm)", "翼缘厚度t2(mm)",
-            "截面面积(cm²)", "理论重量(kg/m)", "惯性矩Ix(cm⁴)", "惯性矩Iy(cm⁴)",
-            "截面模量Wx(cm³)", "截面模量Wy(cm³)"
+            "圆角半径r(mm)", "内圆角半径r'(mm)", "截面面积(cm²)", "理论重量(kg/m)", 
+            "表面积(m²/m)", "惯性矩Ix(cm⁴)", "惯性矩Iy(cm⁴)", "惯性半径rx(cm)", 
+            "惯性半径ry(cm)", "截面模量Wx(cm³)", "截面模量Wy(cm³)"
         ])
         
         # 设置表头自适应
@@ -205,19 +207,64 @@ class SteelShapeTableWidget(QWidget):
         # 清空表格
         self._table_widget.setRowCount(0)
         
-        # 添加数据到表格
-        for i, shape in enumerate(shapes):
-            self._table_widget.insertRow(i)
+        # 获取当前表类型的列配置
+        column_config, table_name = get_table_config(shape_type)
+        
+        if column_config:
+            # 设置表格列数
+            self._table_widget.setColumnCount(len(column_config))
             
-            # 填充数据
-            self._table_widget.setItem(i, 0, QTableWidgetItem(shape["型号"]))
+            # 设置表格标题
+            headers = [title for _, title, _ in column_config]
+            self._table_widget.setHorizontalHeaderLabels(headers)
             
-            # 数值类型的数据设置为右对齐
-            for col, key in enumerate(["高度H", "宽度B", "腹板厚度t1", "翼缘厚度t2", "截面面积", "理论重量", "惯性矩Ix", "惯性矩Iy", "截面模量Wx", "截面模量Wy"], 1):
-                if key in shape:
-                    item = QTableWidgetItem(f"{shape[key]:.2f}")
-                    item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                    self._table_widget.setItem(i, col, item)
+            # 记录当前表类型（用于选择变化时提取数据）
+            self._current_table_name = table_name
+            
+            # 添加数据到表格
+            for i, shape in enumerate(shapes):
+                self._table_widget.insertRow(i)
+                
+                # 填充数据
+                for col, (db_col, title, fmt) in enumerate(column_config):
+                    # 忽略大小写查找字段
+                    found_key = None
+                    for key in shape.keys():
+                        if key.lower() == db_col.lower():
+                            found_key = key
+                            break
+                    if found_key and shape[found_key] is not None:
+                        value = shape[found_key]
+                        if fmt == 's':
+                            item = QTableWidgetItem(str(value))
+                        else:
+                            # 使用 format 方法格式化数字
+                            format_str = "{:" + fmt + "}"
+                            formatted_value = format_str.format(value)
+                            item = QTableWidgetItem(formatted_value)
+                            item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                        self._table_widget.setItem(i, col, item)
+        else:
+            # 默认配置（向后兼容）
+            self._table_widget.setColumnCount(16)
+            self._table_widget.setHorizontalHeaderLabels([
+                "型号", "高度H(mm)", "宽度B(mm)", "腹板厚度t1(mm)", "翼缘厚度t2(mm)",
+                "圆角半径r(mm)", "内圆角半径r'(mm)", "截面面积(cm²)", "理论重量(kg/m)", 
+                "表面积(m²/m)", "惯性矩Ix(cm⁴)", "惯性矩Iy(cm⁴)", "惯性半径rx(cm)", 
+                "惯性半径ry(cm)", "截面模量Wx(cm³)", "截面模量Wy(cm³)"
+            ])
+            
+            for i, shape in enumerate(shapes):
+                self._table_widget.insertRow(i)
+                self._table_widget.setItem(i, 0, QTableWidgetItem(shape["型号"]))
+                
+                for col, key in enumerate(["高度H", "宽度B", "腹板厚度t1", "翼缘厚度t2", "圆角半径r", "内圆角半径r'", "截面面积", "理论重量", "表面积", "惯性矩Ix", "惯性矩Iy", "惯性半径rx", "惯性半径ry", "截面模量Wx", "截面模量Wy"], 1):
+                    if key in shape:
+                        item = QTableWidgetItem(f"{shape[key]:.2f}")
+                        item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                        self._table_widget.setItem(i, col, item)
+            
+            self._current_table_name = None
     
     @Slot()
     def _on_table_selection_changed(self):
@@ -237,15 +284,28 @@ class SteelShapeTableWidget(QWidget):
         # 获取型钢类型
         shape_data["类型"] = self._type_combo.currentText()
         
-        # 提取数值参数
-        headers = ["高度H", "宽度B", "腹板厚度t1", "翼缘厚度t2", "截面面积", "理论重量", "惯性矩Ix", "惯性矩Iy", "截面模量Wx", "截面模量Wy"]
-        for i, header in enumerate(headers, 1):
-            item = self._table_widget.item(row, i)
-            if item and item.text():
-                try:
-                    shape_data[header] = float(item.text())
-                except ValueError:
-                    pass
+        # 获取当前表类型的列配置
+        column_config, table_name = get_table_config(self._type_combo.currentText())
+        
+        if column_config:
+            # 根据列配置提取数据
+            for col, (db_col, title, fmt) in enumerate(column_config):
+                item = self._table_widget.item(row, col)
+                if item and item.text():
+                    try:
+                        shape_data[title] = float(item.text())
+                    except ValueError:
+                        pass
+        else:
+            # 默认配置（向后兼容）
+            headers = ["高度H", "宽度B", "腹板厚度t1", "翼缘厚度t2", "圆角半径r", "内圆角半径r'", "截面面积", "理论重量", "表面积", "惯性矩Ix", "惯性矩Iy", "惯性半径rx", "惯性半径ry", "截面模量Wx", "截面模量Wy"]
+            for i, header in enumerate(headers, 1):
+                item = self._table_widget.item(row, i)
+                if item and item.text():
+                    try:
+                        shape_data[header] = float(item.text())
+                    except ValueError:
+                        pass
         
         # 更新截面形状图
         self._section_diagram.set_shape_data(shape_data)

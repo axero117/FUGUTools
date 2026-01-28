@@ -32,3 +32,9 @@ __pycache__/
 *.gif__pycache__/
 *.pyc
 *.pyo
+
+# Excel文件
+*.xlsx
+*.xls
+~$*.xlsx
+~$*.xls
