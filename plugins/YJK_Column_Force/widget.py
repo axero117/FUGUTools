@@ -20,6 +20,9 @@ class YJKColumnForceWidget(QWidget):
         """初始化UI组件"""
         super().__init__()
         
+        # 启用拖放功能
+        self.setAcceptDrops(True)
+        
         # 初始化业务逻辑
         self._logic = YJKColumnForceLogic()
         
@@ -31,6 +34,10 @@ class YJKColumnForceWidget(QWidget):
         
         # 连接信号和槽
         self._connect_signals()
+
+        # 设置鼠标事件透明，允许拖放事件穿透
+        self.file_info_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.log_text.setAttribute(Qt.WA_TransparentForMouseEvents)
     
     def _init_ui(self):
         """初始化UI"""
@@ -38,6 +45,9 @@ class YJKColumnForceWidget(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(25, 25, 25, 25)
         main_layout.setSpacing(25)
+        
+        # 设置布局的拖放属性
+        main_layout.setEnabled(True)
 
         # 模式切换区域
         mode_layout = QHBoxLayout()
@@ -253,6 +263,16 @@ class YJKColumnForceWidget(QWidget):
 
         # 文件路径
         self.file_path = ""
+        
+        # 在文件信息区域禁用拖放（由主widget处理）
+        self.file_info_label.setAcceptDrops(False)  # 子控件不处理拖放
+        self.select_btn.setAcceptDrops(False)
+        
+        # 在工作区设置拖放属性
+        self.log_text.setAcceptDrops(False)
+        
+        # 启用整个widget的拖放
+        self.setMouseTracking(True)
 
     def _connect_signals(self):
         """连接信号和槽"""
@@ -343,6 +363,39 @@ class YJKColumnForceWidget(QWidget):
 
         if file_path:
             self.set_file(file_path)
+
+    def dragEnterEvent(self, event):
+        """处理拖拽进入事件"""
+        if event.mimeData().hasUrls():
+            # 检查拖拽的文件中是否包含Excel文件
+            for url in event.mimeData().urls():
+                file_path = url.toLocalFile()
+                if file_path.lower().endswith(('.xlsx', '.xls', '.xlsm')):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dropEvent(self, event):
+        """处理拖放事件"""
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                file_path = url.toLocalFile()
+                
+                # 检查文件是否存在且是Excel文件
+                if os.path.exists(file_path) and os.path.isfile(file_path):
+                    if file_path.lower().endswith(('.xlsx', '.xls', '.xlsm')):
+                        try:
+                            # 使用pandas验证文件
+                            pd.read_excel(file_path, nrows=1)
+                            self.set_file(file_path)
+                            self.log_message(f"已通过拖放导入文件: {os.path.basename(file_path)}", "success")
+                            event.acceptProposedAction()
+                            return
+                        except Exception as e:
+                            self.log_message(f"✗ 文件读取失败: {str(e)}", "error")
+                            QMessageBox.critical(self, "文件读取错误", f"无法读取拖放的文件: {str(e)}")
+        
+        event.ignore()
 
 
 

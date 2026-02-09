@@ -249,134 +249,22 @@ class BasicBlockWidget(QWidget):
         self._is_plain_concrete_layout = QHBoxLayout()
         self._is_plain_concrete_layout.addWidget(QLabel("是否素砼?"))
         
-        # 创建按钮容器
-        button_container = QWidget()
-        button_layout = QHBoxLayout(button_container)
-        button_layout.setSpacing(10)
-        button_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # 否按钮
-        self._is_plain_concrete_no_btn = QPushButton("否")
-        self._is_plain_concrete_no_btn.setCheckable(True)
-        self._is_plain_concrete_no_btn.setChecked(True)  # 默认否
-        self._is_plain_concrete_no_btn.setFixedWidth(80)
-        self._is_plain_concrete_no_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2c2c2c, stop:1 #1e1e1e);
-                color: #e0e0e0;
-                border: 1px solid #444;
-                border-radius: 15px;
-                padding: 8px 15px;
-                text-align: center;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #40a1e0, stop:1 #3498DB);
-                border: 1px solid #2980B9;
-            }
-            QPushButton:checked {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3498DB, stop:1 #2980B9);
-                color: white;
-                border: 1px solid #2471A3;
-            }
-        """)
-        button_layout.addWidget(self._is_plain_concrete_no_btn)
-        
-        # 是按钮
-        self._is_plain_concrete_yes_btn = QPushButton("是")
-        self._is_plain_concrete_yes_btn.setCheckable(True)
-        self._is_plain_concrete_yes_btn.setFixedWidth(80)
-        self._is_plain_concrete_yes_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2c2c2c, stop:1 #1e1e1e);
-                color: #e0e0e0;
-                border: 1px solid #444;
-                border-radius: 15px;
-                padding: 8px 15px;
-                text-align: center;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #40a1e0, stop:1 #3498DB);
-                border: 1px solid #2980B9;
-            }
-            QPushButton:checked {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3498DB, stop:1 #2980B9);
-                color: white;
-                border: 1px solid #2471A3;
-            }
-        """)
-        button_layout.addWidget(self._is_plain_concrete_yes_btn)
-        
-        # 添加到布局
-        self._is_plain_concrete_layout.addWidget(button_container)
+        # 创建下拉选择框
+        self._is_plain_concrete_combo = QComboBox()
+        self._is_plain_concrete_combo.addItems(["否", "是"])
+        self._is_plain_concrete_combo.setFixedWidth(80)
+        self._is_plain_concrete_layout.addWidget(self._is_plain_concrete_combo)
         other_layout.addLayout(self._is_plain_concrete_layout)
         
         # 是否打桩
         self._is_pile_layout = QHBoxLayout()
         self._is_pile_layout.addWidget(QLabel("是否打桩?"))
         
-        # 创建按钮容器
-        pile_button_container = QWidget()
-        pile_button_layout = QHBoxLayout(pile_button_container)
-        pile_button_layout.setSpacing(10)
-        pile_button_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # 否按钮
-        self._is_pile_no_btn = QPushButton("否")
-        self._is_pile_no_btn.setCheckable(True)
-        self._is_pile_no_btn.setChecked(True)  # 默认否
-        self._is_pile_no_btn.setFixedWidth(80)
-        self._is_pile_no_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2c2c2c, stop:1 #1e1e1e);
-                color: #e0e0e0;
-                border: 1px solid #444;
-                border-radius: 15px;
-                padding: 8px 15px;
-                text-align: center;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #40a1e0, stop:1 #3498DB);
-                border: 1px solid #2980B9;
-            }
-            QPushButton:checked {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3498DB, stop:1 #2980B9);
-                color: white;
-                border: 1px solid #2471A3;
-            }
-        """)
-        pile_button_layout.addWidget(self._is_pile_no_btn)
-        
-        # 是按钮
-        self._is_pile_yes_btn = QPushButton("是")
-        self._is_pile_yes_btn.setCheckable(True)
-        self._is_pile_yes_btn.setFixedWidth(80)
-        self._is_pile_yes_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2c2c2c, stop:1 #1e1e1e);
-                color: #e0e0e0;
-                border: 1px solid #444;
-                border-radius: 15px;
-                padding: 8px 15px;
-                text-align: center;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #40a1e0, stop:1 #3498DB);
-                border: 1px solid #2980B9;
-            }
-            QPushButton:checked {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3498DB, stop:1 #2980B9);
-                color: white;
-                border: 1px solid #2471A3;
-            }
-        """)
-        pile_button_layout.addWidget(self._is_pile_yes_btn)
-        
-        # 添加到布局
-        self._is_pile_layout.addWidget(pile_button_container)
+        # 创建下拉选择框
+        self._is_pile_combo = QComboBox()
+        self._is_pile_combo.addItems(["否", "是"])
+        self._is_pile_combo.setFixedWidth(80)
+        self._is_pile_layout.addWidget(self._is_pile_combo)
         other_layout.addLayout(self._is_pile_layout)
         
         # 桩根数
@@ -509,12 +397,8 @@ class BasicBlockWidget(QWidget):
         
     def _connect_signals(self):
         """连接信号和槽"""
-        # 连接是否素砼按钮的互斥信号
-        self._is_plain_concrete_no_btn.clicked.connect(self._on_plain_concrete_button_clicked)
-        self._is_plain_concrete_yes_btn.clicked.connect(self._on_plain_concrete_button_clicked)
-        # 连接是否打桩按钮的互斥信号
-        self._is_pile_no_btn.clicked.connect(self._on_pile_button_clicked)
-        self._is_pile_yes_btn.clicked.connect(self._on_pile_button_clicked)
+        # 连接是否打桩下拉选择框的信号
+        self._is_pile_combo.currentIndexChanged.connect(self._on_pile_combo_changed)
         # 连接计算按钮的点击信号
         self._calculate_btn.clicked.connect(self._on_calculate_clicked)
         # 连接导出计算书按钮的点击信号
@@ -592,24 +476,12 @@ class BasicBlockWidget(QWidget):
         menu.exec_(sender.mapToGlobal(pos))
     
     @Slot()
-    def _on_plain_concrete_button_clicked(self):
-        """是否素砼按钮点击事件，确保互斥"""
-        sender = self.sender()
-        if sender == self._is_plain_concrete_no_btn:
-            self._is_plain_concrete_yes_btn.setChecked(False)
-        else:
-            self._is_plain_concrete_no_btn.setChecked(False)
-    
-    @Slot()
-    def _on_pile_button_clicked(self):
-        """是否打桩按钮点击事件，确保互斥并控制桩根数输入框的启用/禁用"""
-        sender = self.sender()
-        if sender == self._is_pile_no_btn:
-            self._is_pile_yes_btn.setChecked(False)
+    def _on_pile_combo_changed(self, index):
+        """是否打桩下拉选择框变化事件，控制桩根数输入框的启用/禁用"""
+        if index == 0:  # 否
             self._pile_count_input.setEnabled(False)  # 禁用桩根数输入框
             self._pile_count_input.clear()  # 清空桩根数输入框
-        else:
-            self._is_pile_no_btn.setChecked(False)
+        else:  # 是
             self._pile_count_input.setEnabled(True)  # 启用桩根数输入框
     
     @Slot()
@@ -670,7 +542,7 @@ class BasicBlockWidget(QWidget):
             plate_volume = plate_volume_single * foundation_count
             
             # 获取是否素砼
-            is_plain_concrete = self._is_plain_concrete_yes_btn.isChecked()
+            is_plain_concrete = (self._is_plain_concrete_combo.currentIndex() == 1)  # 1表示"是"
             
             # 验算地基承载力（单个基础）
             bearing_check_result_single = self._logic.check_bearing_capacity(
@@ -787,11 +659,11 @@ class BasicBlockWidget(QWidget):
                         </tr>
                         <tr>
                             <td class="param-item"><span class="param-label">基础混凝土材质：</span><span class="param-value">{self._concrete_material_combo.currentText()}</span></td>
-                            <td class="param-item"><span class="param-label">是否素砼：</span><span class="param-value">{'是' if self._is_plain_concrete_yes_btn.isChecked() else '否'}</span></td>
+                            <td class="param-item"><span class="param-label">是否素砼：</span><span class="param-value">{'是' if self._is_plain_concrete_combo.currentIndex() == 1 else '否'}</span></td>
                             <td class="param-item"></td>
                         </tr>
                         <tr>
-                            <td class="param-item"><span class="param-label">是否打桩：</span><span class="param-value">{'是' if self._is_pile_yes_btn.isChecked() else '否'}</span></td>
+                            <td class="param-item"><span class="param-label">是否打桩：</span><span class="param-value">{'是' if self._is_pile_combo.currentIndex() == 1 else '否'}</span></td>
                             <td class="param-item"><span class="param-label">桩根数：</span><span class="param-value">{self._pile_count_input.text()}根</span></td>
                             <td class="param-item"></td>
                         </tr>
@@ -963,12 +835,10 @@ class BasicBlockWidget(QWidget):
         self._pile_count_input.clear()
         # 清空结果文本框
         self._result_text.clear()
-        # 重置是否素砼按钮状态
-        self._is_plain_concrete_no_btn.setChecked(True)
-        self._is_plain_concrete_yes_btn.setChecked(False)
-        # 重置是否打桩按钮状态
-        self._is_pile_no_btn.setChecked(True)
-        self._is_pile_yes_btn.setChecked(False)
+        # 重置是否素砼选项
+        self._is_plain_concrete_combo.setCurrentIndex(0)  # 重置为否
+        # 重置是否打桩选项
+        self._is_pile_combo.setCurrentIndex(0)  # 重置为否
         self._pile_count_input.setEnabled(False)  # 禁用桩根数输入框
         # 重置材质选项
 
@@ -1002,8 +872,8 @@ class BasicBlockWidget(QWidget):
             "基础混凝土材质": self._concrete_material_combo.currentText(),
             "换填厚度": self._replacement_thickness_input.text(),
             "换填宽度": self._replacement_width_input.text(),
-            "是否素砼": "是" if self._is_plain_concrete_yes_btn.isChecked() else "否",
-            "是否打桩": "是" if self._is_pile_yes_btn.isChecked() else "否",
+            "是否素砼": "是" if self._is_plain_concrete_combo.currentIndex() == 1 else "否",
+            "是否打桩": "是" if self._is_pile_combo.currentIndex() == 1 else "否",
             "桩根数": self._pile_count_input.text(),
             "基础个数": self._foundation_count_input.text()
         }
@@ -1075,30 +945,24 @@ class BasicBlockWidget(QWidget):
             if "是否素砼" in data:
                 is_plain_concrete = data["是否素砼"]
                 if is_plain_concrete == "是":
-                    self._is_plain_concrete_yes_btn.setChecked(True)
-                    self._is_plain_concrete_no_btn.setChecked(False)
+                    self._is_plain_concrete_combo.setCurrentIndex(1)  # 设置为是
                 else:
-                    self._is_plain_concrete_no_btn.setChecked(True)
-                    self._is_plain_concrete_yes_btn.setChecked(False)
+                    self._is_plain_concrete_combo.setCurrentIndex(0)  # 设置为否
             # 兼容旧版数据
             elif "是否泵基础" in data:
                 is_pump = data["是否泵基础"]
                 # 旧版泵基础的"是"对应现在的"否"，因为泵基础通常不是素砼
                 if is_pump == "是":
-                    self._is_plain_concrete_no_btn.setChecked(True)
-                    self._is_plain_concrete_yes_btn.setChecked(False)
+                    self._is_plain_concrete_combo.setCurrentIndex(0)  # 设置为否
                 else:
-                    self._is_plain_concrete_no_btn.setChecked(True)
-                    self._is_plain_concrete_yes_btn.setChecked(False)
+                    self._is_plain_concrete_combo.setCurrentIndex(0)  # 设置为否
             if "是否打桩" in data:
                 is_pile = data["是否打桩"]
                 if is_pile == "是":
-                    self._is_pile_yes_btn.setChecked(True)
-                    self._is_pile_no_btn.setChecked(False)
+                    self._is_pile_combo.setCurrentIndex(1)  # 设置为是
                     self._pile_count_input.setEnabled(True)
                 else:
-                    self._is_pile_no_btn.setChecked(True)
-                    self._is_pile_yes_btn.setChecked(False)
+                    self._is_pile_combo.setCurrentIndex(0)  # 设置为否
                     self._pile_count_input.setEnabled(False)
             if "桩根数" in data:
                 self._pile_count_input.setText(data["桩根数"])
@@ -1223,8 +1087,8 @@ class BasicBlockWidget(QWidget):
                 replacement_width = float(self._replacement_width_input.text()) if self._replacement_width_input.text() else 0
                 
                 # 其他参数
-                is_plain_concrete = self._is_plain_concrete_yes_btn.isChecked()
-                is_pile = self._is_pile_yes_btn.isChecked()
+                is_plain_concrete = (self._is_plain_concrete_combo.currentIndex() == 1)  # 1表示"是"
+                is_pile = (self._is_pile_combo.currentIndex() == 1)  # 1表示"是"
                 pile_count = int(self._pile_count_input.text()) if self._pile_count_input.text() else 0
                 foundation_count = int(self._foundation_count_input.text()) if self._foundation_count_input.text() else 1
                 
@@ -1555,8 +1419,8 @@ class BasicBlockWidget(QWidget):
             replacement_width = float(self._replacement_width_input.text()) if self._replacement_width_input.text() else 0
             replacement_thickness = float(self._replacement_thickness_input.text()) if self._replacement_thickness_input.text() else 0
             grout_thickness = float(self._grout_input.text()) if self._grout_input.text() else 0
-            is_plain_concrete = self._is_plain_concrete_yes_btn.isChecked()
-            is_pile = self._is_pile_yes_btn.isChecked()
+            is_plain_concrete = (self._is_plain_concrete_combo.currentIndex() == 1)  # 1表示"是"
+            is_pile = (self._is_pile_combo.currentIndex() == 1)  # 1表示"是"
 
             basic_volume_single = self._logic.calculate_basic_volume(length, width, height)
             cushion_volume_single = self._logic.calculate_cushion_volume(length, width, cushion_thickness)

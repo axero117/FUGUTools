@@ -49,6 +49,7 @@ class MainWindow(QMainWindow):
         # 创建中心部件
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
+        self.centralWidget().setAcceptDrops(True)
         
         # 主布局：水平布局，左侧工具导航，右侧工作区
         main_layout = QHBoxLayout(central_widget)
@@ -119,6 +120,13 @@ class MainWindow(QMainWindow):
         
         # 初始化状态栏
         self._init_status_bar()
+
+        # 启用工作区的拖放功能
+        self._workspace.setAcceptDrops(True)
+
+        #设置标签栏接受拖放
+        tab_bar = self._workspace.tabBar()
+        tab_bar.setAcceptDrops(True)
     
     def _add_welcome_tab(self):
         """添加欢迎页面"""
@@ -244,13 +252,6 @@ class MainWindow(QMainWindow):
         
         # 中间：拉伸空间
         status_bar.addPermanentWidget(QWidget(), 1)
-        
-        # 右侧：最近项目
-        recent_project_label = QLabel("最近项目: ")
-        status_bar.addPermanentWidget(recent_project_label)
-        
-        self._recent_project = QLabel("xxx.stp")
-        status_bar.addPermanentWidget(self._recent_project)
         
         # 右侧：版本信息
         version_label = QLabel(" | 版本 v1.0.0")
@@ -653,4 +654,22 @@ class MainWindow(QMainWindow):
             self._workspace.addTab(new_widget, current_tab_text)
             # 切换到新添加的标签页
             self._workspace.setCurrentIndex(self._workspace.count() - 1)
+    
+    def dragEnterEvent(self, event):
+        """全局拖入事件处理 - 转发到当前活动标签页"""
+        current_widget = self._workspace.currentWidget()
+        if current_widget and hasattr(current_widget, 'dragEnterEvent'):
+            # 检查当前标签页是否支持文件导入
+            if hasattr(current_widget, 'file_path') or hasattr(current_widget, 'set_file'):
+                current_widget.dragEnterEvent(event)
+                return
+        event.ignore()
 
+    def dropEvent(self, event):
+        """全局放下事件处理 - 转发到当前活动标签页"""
+        current_widget = self._workspace.currentWidget()
+        if current_widget and hasattr(current_widget, 'dropEvent'):
+            if hasattr(current_widget, 'file_path') or hasattr(current_widget, 'set_file'):
+                current_widget.dropEvent(event)
+                return
+        event.ignore()

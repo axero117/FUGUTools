@@ -27,6 +27,9 @@ class FugoApp:
         # 初始化主窗口
         self._main_window = MainWindow()
         
+        # 设置应用程序图标
+        self._set_app_icon()
+        
     def run(self):
         """运行应用程序"""
         # 第一阶段：加载插件（仅发现和注册，不实例化）
@@ -51,11 +54,49 @@ class FugoApp:
         # 运行事件循环
         return self._app.exec()
     
+    def _set_app_icon(self):
+        """设置应用程序图标"""
+        try:
+            # 处理PyInstaller打包后的路径问题
+            import sys
+            from pathlib import Path
+            
+            if hasattr(sys, '_MEIPASS'):
+                # 打包后的临时提取目录
+                base_path = Path(sys._MEIPASS)
+            else:
+                # 开发环境下的项目根目录
+                base_path = Path(__file__).parent.parent
+            
+            # 加载应用图标
+            icon_path = base_path / "resources" / "icons" / "favicon (1).ico"
+            
+            if icon_path.exists():
+                icon = QIcon(str(icon_path))
+                self._app.setWindowIcon(icon)
+                self._main_window.setWindowIcon(icon)
+                self._logger.info(f"设置应用图标: {icon_path}")
+            else:
+                self._logger.warning(f"图标文件不存在: {icon_path}")
+        except Exception as e:
+            self._logger.error(f"设置应用图标失败: {e}")
+
     def _apply_stylesheet(self):
         """应用全局样式表"""
         try:
-            # 直接加载白天模式样式表
-            stylesheet_path = "resources/styles.qss"
+            # 处理PyInstaller打包后的路径问题
+            import sys
+            from pathlib import Path
+            
+            if hasattr(sys, '_MEIPASS'):
+                # 打包后的临时提取目录
+                base_path = Path(sys._MEIPASS)
+            else:
+                # 开发环境下的项目根目录
+                base_path = Path(__file__).parent.parent
+            
+            # 加载白天模式样式表
+            stylesheet_path = base_path / "resources" / "styles.qss"
             
             with open(stylesheet_path, "r", encoding="utf-8") as f:
                 self._app.setStyleSheet(f.read())

@@ -17,7 +17,17 @@ class PluginManager:
         self._logger = Logger()
         self._plugins = []  # 已实例化的插件列表
         self._plugin_registry = []  # 插件注册表，存储插件类和元信息
-        self._plugin_dirs = [Path("plugins")]
+        
+        # 处理PyInstaller打包后的路径问题
+        import sys
+        if hasattr(sys, '_MEIPASS'):
+            # 打包后的临时提取目录
+            base_path = Path(sys._MEIPASS)
+        else:
+            # 开发环境下的项目根目录
+            base_path = Path(__file__).parent.parent
+        
+        self._plugin_dirs = [base_path / "plugins"]
     
     def add_plugin_dir(self, plugin_dir: str):
         """添加插件目录

@@ -16,7 +16,6 @@ class Config:
             config_dir: 配置文件目录
         """
         self._config_dir = Path(config_dir)
-        self._config_dir.mkdir(exist_ok=True)
         
         self._config = {}
         self._load_default_config()
@@ -75,13 +74,15 @@ class Config:
         config_path = Path(config_file)
         
         try:
-            with open(config_path, "w", encoding="utf-8") as f:
-                if config_path.suffix == ".json":
-                    json.dump(self._config, f, indent=2, ensure_ascii=False)
-                elif config_path.suffix in [".yaml", ".yml"]:
-                    yaml.dump(self._config, f, default_flow_style=False, allow_unicode=True)
-                else:
-                    raise ValueError(f"Unsupported config file format: {config_path.suffix}")
+            # 只在配置文件路径存在时保存，不自动创建目录
+            if config_path.parent.exists():
+                with open(config_path, "w", encoding="utf-8") as f:
+                    if config_path.suffix == ".json":
+                        json.dump(self._config, f, indent=2, ensure_ascii=False)
+                    elif config_path.suffix in [".yaml", ".yml"]:
+                        yaml.dump(self._config, f, default_flow_style=False, allow_unicode=True)
+                    else:
+                        raise ValueError(f"Unsupported config file format: {config_path.suffix}")
         except Exception as e:
             print(f"保存配置失败: {e}")
     

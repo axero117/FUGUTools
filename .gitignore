@@ -16,6 +16,7 @@ Thumbs.db
 build/
 dist/
 *.egg-info/
+build_exe.py
 
 # Python编译文件
 __pycache__/
