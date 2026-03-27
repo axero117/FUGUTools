@@ -15,37 +15,37 @@ from plugins.YJK_Column_Force.logic import YJKColumnForceLogic
 
 class YJKColumnForceWidget(QWidget):
     """YJK柱脚内力处理工具UI组件"""
-    
+
     def __init__(self):
         """初始化UI组件"""
         super().__init__()
-        
+
         # 启用拖放功能
         self.setAcceptDrops(True)
-        
+
         # 初始化业务逻辑
         self._logic = YJKColumnForceLogic()
-        
+
         # 模式标志：当前是否显示原版界面
         self._current_mode = "original"  # "original" 或 "explorer"
-        
+
         # 初始化UI
         self._init_ui()
-        
+
         # 连接信号和槽
         self._connect_signals()
 
         # 设置鼠标事件透明，允许拖放事件穿透
         self.file_info_label.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.log_text.setAttribute(Qt.WA_TransparentForMouseEvents)
-    
+
     def _init_ui(self):
         """初始化UI"""
         # 主布局
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(25, 25, 25, 25)
         main_layout.setSpacing(25)
-        
+
         # 设置布局的拖放属性
         main_layout.setEnabled(True)
 
@@ -53,7 +53,7 @@ class YJKColumnForceWidget(QWidget):
         mode_layout = QHBoxLayout()
         mode_layout.setSpacing(10)
         mode_layout.setAlignment(Qt.AlignLeft)
-        
+
         # 原版模式按钮
         self.original_mode_btn = QPushButton("原版柱底力导出")
         self.original_mode_btn.setFont(QFont("微软雅黑", 10, QFont.Bold))
@@ -77,7 +77,7 @@ class YJKColumnForceWidget(QWidget):
         self.original_mode_btn.setCheckable(True)
         self.original_mode_btn.setChecked(True)
         mode_layout.addWidget(self.original_mode_btn)
-        
+
         # 探索者模式按钮
         self.explorer_mode_btn = QPushButton("探索者柱底力导出")
         self.explorer_mode_btn.setFont(QFont("微软雅黑", 10, QFont.Bold))
@@ -100,7 +100,27 @@ class YJKColumnForceWidget(QWidget):
         """)
         self.explorer_mode_btn.setCheckable(True)
         mode_layout.addWidget(self.explorer_mode_btn)
-        
+
+        # 使用说明按钮
+        self.usage_btn = QPushButton("使用说明")
+        self.usage_btn.setFont(QFont("微软雅黑", 10, QFont.Bold))
+        self.usage_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #95a5a6;
+                color: white;
+                border-radius: 4px;
+                padding: 6px 12px;
+            }
+            QPushButton:hover {
+                background-color: #7f8c8d;
+            }
+            QPushButton:pressed {
+                background-color: #6c7a7a;
+            }
+        """)
+        mode_layout.addStretch()
+        mode_layout.addWidget(self.usage_btn)
+
         # 添加模式切换区域到主布局
         main_layout.addLayout(mode_layout)
 
@@ -263,14 +283,14 @@ class YJKColumnForceWidget(QWidget):
 
         # 文件路径
         self.file_path = ""
-        
+
         # 在文件信息区域禁用拖放（由主widget处理）
         self.file_info_label.setAcceptDrops(False)  # 子控件不处理拖放
         self.select_btn.setAcceptDrops(False)
-        
+
         # 在工作区设置拖放属性
         self.log_text.setAcceptDrops(False)
-        
+
         # 启用整个widget的拖放
         self.setMouseTracking(True)
 
@@ -281,10 +301,83 @@ class YJKColumnForceWidget(QWidget):
         self.export_pressure_btn.clicked.connect(self.process_pressure)
         self.export_tension_btn.clicked.connect(self.process_tension)
         self.export_all_btn.clicked.connect(self.process_all)
-        
+
         # 模式切换按钮信号
         self.original_mode_btn.clicked.connect(self._on_original_mode_clicked)
         self.explorer_mode_btn.clicked.connect(self._on_explorer_mode_clicked)
+
+        # 使用说明
+        self.usage_btn.clicked.connect(self._show_usage_guide)
+
+    def _show_usage_guide(self):
+        """显示使用说明对话框"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("YJK柱脚内力处理工具 - 使用说明")
+        dialog.resize(760, 560)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        guide_text = QTextEdit()
+        guide_text.setReadOnly(True)
+        guide_text.setFont(QFont("微软雅黑", 10))
+        guide_text.setHtml("""
+        <h3>一、基础使用流程</h3>
+        <ol>
+          <li>点击 <b>“选择YJK表格文件”</b>，或直接把 Excel 文件拖入窗口；</li>
+          <li>确认文件中包含工作表 <b>“基本组合内力”</b>（建议同时包含 <b>“构件基本信息”</b>，用于构件型号匹配）；</li>
+          <li>根据目标选择模式：<b>原版柱底力导出</b> 或 <b>探索者柱底力导出</b>；</li>
+          <li>点击对应导出按钮（压力/拉力/全部），选择导出格式（Excel/TXT）；</li>
+          <li>导出完成后会弹出结果提示，并尝试自动打开保存目录。</li>
+        </ol>
+
+        <h3>二、数据处理规则（两种模式通用）</h3>
+        <ul>
+          <li>删除 <b>F 列 = 1</b> 的行；</li>
+          <li>按 <b>K 列</b> 倒序排序；</li>
+          <li>可按 K 列符号筛选：<b>K&lt;0 为压力</b>，<b>K&gt;0 为拉力</b>；</li>
+          <li>若存在“构件基本信息”表，会按 D 列进行匹配，生成构件型号并用于分组导出。</li>
+        </ul>
+
+        <h3>三、导出模式功能说明</h3>
+        <p><b>1）原版柱底力导出</b></p>
+        <ul>
+          <li><b>导出全部压力数据</b>：仅导出 K 列小于 0 的组合内力数据；</li>
+          <li><b>导出全部拉力数据</b>：仅导出 K 列大于 0 的组合内力数据；</li>
+          <li><b>导出全部柱底内力</b>：导出过滤后的全部数据（不按正负再筛选）；</li>
+          <li>保留原始表格结构（含表头行），并附带“处理统计”信息。</li>
+        </ul>
+
+        <p><b>2）探索者柱底力导出</b></p>
+        <ul>
+          <li><b>导出探索者压力数据</b>：导出压力工况，并转换为探索者所需字段格式；</li>
+          <li><b>导出探索者拉力数据</b>：导出拉力工况，并转换为探索者所需字段格式；</li>
+          <li><b>导出探索者全部内力</b>：导出全部工况并转换为探索者格式；</li>
+          <li>输出字段为：<b>序号、描述、轴力Nz、剪力Vx、剪力Vy、弯矩Mx、弯矩My、是否抗震</b>。</li>
+        </ul>
+
+        <h3>四、导出格式说明</h3>
+        <ul>
+          <li><b>Excel（.xlsx）</b>：适合后续编辑与复核，单元格已设置居中；</li>
+          <li><b>TXT（.txt）</b>：定宽文本输出，便于与外部程序或特定导入器对接。</li>
+        </ul>
+
+        <h3>五、常见提示</h3>
+        <ul>
+          <li>提示“未找到工作表基本组合内力”：请确认输入文件是否为正确的 YJK 结果表；</li>
+          <li>提示“没有找到符合条件的数据”：说明当前筛选（压力/拉力）下无有效行；</li>
+          <li>若未成功按构件分组导出，请检查“构件基本信息”中 D/G 列是否完整、可匹配。</li>
+        </ul>
+        """)
+        layout.addWidget(guide_text)
+
+        close_btn = QPushButton("关闭")
+        close_btn.setFixedHeight(34)
+        close_btn.clicked.connect(dialog.accept)
+        layout.addWidget(close_btn)
+
+        dialog.exec_()
 
     def log_message(self, message, level="info"):
         """添加日志消息，支持不同级别"""
@@ -380,7 +473,7 @@ class YJKColumnForceWidget(QWidget):
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
                 file_path = url.toLocalFile()
-                
+
                 # 检查文件是否存在且是Excel文件
                 if os.path.exists(file_path) and os.path.isfile(file_path):
                     if file_path.lower().endswith(('.xlsx', '.xls', '.xlsm')):
@@ -394,7 +487,7 @@ class YJKColumnForceWidget(QWidget):
                         except Exception as e:
                             self.log_message(f"✗ 文件读取失败: {str(e)}", "error")
                             QMessageBox.critical(self, "文件读取错误", f"无法读取拖放的文件: {str(e)}")
-        
+
         event.ignore()
 
 
@@ -404,35 +497,35 @@ class YJKColumnForceWidget(QWidget):
         dialog = QDialog(self)
         dialog.setWindowTitle("选择导出格式")
         dialog.setFixedSize(300, 150)
-        
+
         layout = QVBoxLayout(dialog)
-        
+
         label = QLabel("请选择导出文件格式:")
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label)
-        
+
         # 按钮组
         button_group = QButtonGroup(dialog)
-        
+
         # Excel格式
         excel_radio = QRadioButton("Excel格式 (.xlsx)")
         excel_radio.setChecked(True)
         button_group.addButton(excel_radio)
         layout.addWidget(excel_radio)
-        
+
         # TXT格式
         txt_radio = QRadioButton("文本格式 (.txt)")
         button_group.addButton(txt_radio)
         layout.addWidget(txt_radio)
-        
+
         # 确定按钮
         ok_button = QPushButton("确定")
         ok_button.clicked.connect(dialog.accept)
         layout.addWidget(ok_button)
-        
+
         # 居中显示
         dialog.exec_()
-        
+
         # 返回选择的格式
         if excel_radio.isChecked():
             return "xlsx"
@@ -449,10 +542,10 @@ class YJKColumnForceWidget(QWidget):
         try:
             self.log_message("开始处理压力数据...", "info")
             self.export_pressure_btn.setEnabled(False)
-            
+
             # 执行处理
             result = self._logic.process_pressure(self.file_path)
-            
+
             if result["success"]:
                 # 显示成功信息
                 success_msg = f"""
@@ -463,7 +556,7 @@ class YJKColumnForceWidget(QWidget):
                 <b>保存路径:</b> {result['save_path']}<br><br>
                 <i>文件格式: {result['format'].upper()}</i>
                 """
-                
+
                 msg_box = QMessageBox(self)
                 msg_box.setWindowTitle("处理成功")
                 msg_box.setTextFormat(Qt.RichText)
@@ -471,9 +564,9 @@ class YJKColumnForceWidget(QWidget):
                 msg_box.setIcon(QMessageBox.Information)
                 msg_box.setStandardButtons(QMessageBox.Ok)
                 msg_box.exec_()
-                
+
                 self.log_message(f"✓ 压力数据已保存到: {result['save_path']}", "success")
-                
+
                 # 打开文件所在文件夹
                 try:
                     os.startfile(os.path.dirname(result['save_path']))
@@ -498,10 +591,10 @@ class YJKColumnForceWidget(QWidget):
         try:
             self.log_message("开始处理拉力数据...", "info")
             self.export_tension_btn.setEnabled(False)
-            
+
             # 执行处理
             result = self._logic.process_tension(self.file_path)
-            
+
             if result["success"]:
                 # 显示成功信息
                 success_msg = f"""
@@ -512,7 +605,7 @@ class YJKColumnForceWidget(QWidget):
                 <b>保存路径:</b> {result['save_path']}<br><br>
                 <i>文件格式: {result['format'].upper()}</i>
                 """
-                
+
                 msg_box = QMessageBox(self)
                 msg_box.setWindowTitle("处理成功")
                 msg_box.setTextFormat(Qt.RichText)
@@ -520,9 +613,9 @@ class YJKColumnForceWidget(QWidget):
                 msg_box.setIcon(QMessageBox.Information)
                 msg_box.setStandardButtons(QMessageBox.Ok)
                 msg_box.exec_()
-                
+
                 self.log_message(f"✓ 拉力数据已保存到: {result['save_path']}", "success")
-                
+
                 # 打开文件所在文件夹
                 try:
                     os.startfile(os.path.dirname(result['save_path']))
@@ -547,10 +640,10 @@ class YJKColumnForceWidget(QWidget):
         try:
             self.log_message("开始处理全部柱底内力数据...", "info")
             self.export_all_btn.setEnabled(False)
-            
+
             # 执行处理
             result = self._logic.process_all(self.file_path)
-            
+
             if result["success"]:
                 # 显示成功信息
                 success_msg = f"""
@@ -561,7 +654,7 @@ class YJKColumnForceWidget(QWidget):
                 <b>保存路径:</b> {result['save_path']}<br><br>
                 <i>文件格式: {result['format'].upper()}</i>
                 """
-                
+
                 msg_box = QMessageBox(self)
                 msg_box.setWindowTitle("处理成功")
                 msg_box.setTextFormat(Qt.RichText)
@@ -569,9 +662,9 @@ class YJKColumnForceWidget(QWidget):
                 msg_box.setIcon(QMessageBox.Information)
                 msg_box.setStandardButtons(QMessageBox.Ok)
                 msg_box.exec_()
-                
+
                 self.log_message(f"✓ 全部柱底内力数据已保存到: {result['save_path']}", "success")
-                
+
                 # 打开文件所在文件夹
                 try:
                     os.startfile(os.path.dirname(result['save_path']))
@@ -585,92 +678,92 @@ class YJKColumnForceWidget(QWidget):
             QMessageBox.critical(self, "处理错误", str(e))
         finally:
             self.export_all_btn.setEnabled(True)
-    
+
     def _on_original_mode_clicked(self):
         """切换到原版模式"""
         if self._current_mode != "original":
             self._current_mode = "original"
             # 恢复标题
             self.title_label.setText("YJK柱脚内力格式调整工具")
-            
+
             # 恢复按钮文本和功能
             self.export_pressure_btn.setText("📤 导出全部压力数据")
             self.export_pressure_btn.clicked.disconnect()
             self.export_pressure_btn.clicked.connect(self.process_pressure)
-            
+
             self.export_tension_btn.setText("📤 导出全部拉力数据")
             self.export_tension_btn.clicked.disconnect()
             self.export_tension_btn.clicked.connect(self.process_tension)
-            
+
             self.export_all_btn.setText("📤 导出全部柱底内力")
             self.export_all_btn.clicked.disconnect()
             self.export_all_btn.clicked.connect(self.process_all)
-            
+
             # 更新按钮状态
             self.original_mode_btn.setChecked(True)
             self.explorer_mode_btn.setChecked(False)
-            
+
             self.log_message("已切换到原版柱底力导出模式", "success")
-    
+
     def _on_explorer_mode_clicked(self):
         """切换到探索者模式"""
         if self._current_mode != "explorer":
             self._current_mode = "explorer"
             # 更新标题
             self.title_label.setText("探索者柱底力导出")
-            
+
             # 更新按钮文本和功能
             self.export_pressure_btn.setText("📤 导出探索者压力数据")
             self.export_pressure_btn.clicked.disconnect()
             self.export_pressure_btn.clicked.connect(self.process_explorer_pressure)
-            
+
             self.export_tension_btn.setText("📤 导出探索者拉力数据")
             self.export_tension_btn.clicked.disconnect()
             self.export_tension_btn.clicked.connect(self.process_explorer_tension)
-            
+
             self.export_all_btn.setText("📤 导出探索者全部内力")
             self.export_all_btn.clicked.disconnect()
             self.export_all_btn.clicked.connect(self.process_explorer_all)
-            
+
             # 更新按钮状态
             self.original_mode_btn.setChecked(False)
             self.explorer_mode_btn.setChecked(True)
-            
+
             self.log_message("已切换到探索者柱底力导出模式", "success")
-    
+
     def process_explorer_pressure(self):
         """处理探索者压力数据"""
         self.export_explorer_data("pressure")
-    
+
     def process_explorer_tension(self):
         """处理探索者拉力数据"""
         self.export_explorer_data("tension")
-    
+
     def process_explorer_all(self):
         """处理探索者全部内力数据"""
         self.export_explorer_data("all")
-    
+
     def export_explorer_data(self, export_type):
         """导出探索者数据"""
         if not self.file_path:
             self.log_message("⚠ 请先选择Excel文件", "error")
             QMessageBox.warning(self, "错误", "请先选择Excel文件")
             return
-        
+
         try:
             self.log_message(f"开始处理探索者{export_type}数据...", "info")
-            
+
             # 禁用所有按钮
             self.export_pressure_btn.setEnabled(False)
             self.export_tension_btn.setEnabled(False)
             self.export_all_btn.setEnabled(False)
-            
+
             # 读取Excel文件
             self.log_message("尝试读取Excel文件...", "info")
-            
+
             # 调用逻辑层处理
             result = self._logic.export_explorer_data(self.file_path, export_type)
-            
+
             if result["success"]:
                 # 显示成功信息
                 success_msg = f"""
@@ -681,7 +774,7 @@ class YJKColumnForceWidget(QWidget):
                 <b>保存路径:</b> {result['save_path']}<br><br>
                 <i>文件格式: {result['format'].upper()}</i>
                 """
-                
+
                 msg_box = QMessageBox(self)
                 msg_box.setWindowTitle("处理成功")
                 msg_box.setTextFormat(Qt.RichText)
@@ -689,9 +782,9 @@ class YJKColumnForceWidget(QWidget):
                 msg_box.setIcon(QMessageBox.Information)
                 msg_box.setStandardButtons(QMessageBox.Ok)
                 msg_box.exec_()
-                
+
                 self.log_message(f"✓ 探索者{export_type}数据已保存到: {result['save_path']}", "success")
-                
+
                 # 打开文件所在文件夹
                 try:
                     os.startfile(os.path.dirname(result['save_path']))
@@ -723,14 +816,14 @@ class YJKColumnForceWidget(QWidget):
                 color: #495057;
             }
         """)
-        
+
         # 禁用按钮
         self.export_pressure_btn.setEnabled(False)
         self.export_tension_btn.setEnabled(False)
         self.export_all_btn.setEnabled(False)
-        
+
         # 清空日志
         self.log_text.clear()
-        
+
         # 清空文件路径
         self.file_path = ""

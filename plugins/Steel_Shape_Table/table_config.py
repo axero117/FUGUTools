@@ -145,11 +145,12 @@ def get_table_config(shape_type):
         return TABLE_COLUMN_CONFIGS['h_sections_2017'], 'h_sections_2017'
     elif 'I型钢' in shape_type and '2016' in shape_type:
         return TABLE_COLUMN_CONFIGS['i_sections_2016'], 'i_sections_2016'
-    elif '等边角钢' in shape_type and '2016' in shape_type:
-        return TABLE_COLUMN_CONFIGS['l_sections_2016'], 'l_sections_2016'
+    # 注意：'不等边角钢' 包含 '等边角钢' 子串，必须优先判断不等边
     elif '不等边角钢' in shape_type and '2016' in shape_type:
         return TABLE_COLUMN_CONFIGS[
             'non_l_sections_2016'], 'non_l_sections_2016'
+    elif '等边角钢' in shape_type and '2016' in shape_type:
+        return TABLE_COLUMN_CONFIGS['l_sections_2016'], 'l_sections_2016'
     elif 'C型钢' in shape_type and '2016' in shape_type:
         return TABLE_COLUMN_CONFIGS['c_sections_2016'], 'c_sections_2016'
     else:

@@ -341,6 +341,8 @@ class SectionDatabase:
                     short_side_width=row['short_side_width'],  # 使用短边宽
                     edge_thickness=row['edge_thickness'],  # 边厚
                     round_radius=row['round_radius'],  # 使用数据库中的圆角半径
+                    X0=row['X0'],  # 重心距离X0
+                    Y0=row['Y0'],  # 重心距离Y0
                     area=row['area'],
                     weight=row['weight'],
                     surface_area=row['surface_area'],  # 使用数据库中的表面积
@@ -350,8 +352,8 @@ class SectionDatabase:
                     Iy1=row['Iy1'],  # Iy1对应数据库中的Iy1列
                     Iu=row['Iu'],  # Iu对应数据库中的Iu列
                     ix=row['rx'],  # 惯性半径ix
-                    iy=row['ry'],  # 惯性半径iy
-                    iu=row['ru'],  # 惯性半径ru
+                    ry=row['ry'],  # 惯性半径ry
+                    ru=row['ru'],  # 惯性半径ru
                     Wx=row['Wx'],  # wx对应数据库中的Wx列
                     Wy=row['Wy'],  # wy对应数据库中的Wy列
                     Wu=row['Wu'],  # Wu对应数据库中的Wu列
