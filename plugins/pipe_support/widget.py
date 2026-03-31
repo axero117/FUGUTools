@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSpacerItem
 )
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QDoubleValidator, QIntValidator
 from PySide6.QtCore import Signal, Slot, Qt
 
 from plugins.pipe_support.logic import PipeSupportLogic
@@ -22,23 +22,109 @@ from plugins.pipe_support.logic import PipeSupportLogic
 
 class PipeSupportWidget(QWidget):
     """管墩计算插件UI组件"""
-    
+
     def __init__(self):
         """初始化UI组件"""
         super().__init__()
-        
+        self.setObjectName("pipeSupportWidget")
+
         # 初始化业务逻辑
         self._logic = PipeSupportLogic()
-        
+
         # 初始化计算结果存储
         self._calculation_results = {}
-        
+
         # 初始化UI
         self._init_ui()
-        
+
+        # 初始化输入校验与占位提示
+        self._setup_input_validators()
+
         # 连接信号和槽
         self._connect_signals()
-    
+
+    def _setup_input_validators(self):
+        """设置数值输入校验器与占位提示"""
+        positive_float_validator = QDoubleValidator(0.0, 1e9, 6, self)
+        positive_float_validator.setNotation(QDoubleValidator.StandardNotation)
+        positive_int_validator = QIntValidator(0, 1000000, self)
+
+        float_inputs = [
+            self._base_length_edit,
+            self._base_bottom_width_edit,
+            self._base_column_length_edit,
+            self._base_column_width_edit,
+            self._base_top_width_edit,
+            self._base_height_edit,
+            self._base_height_above_ground_edit,
+            self._cushion_thickness_edit,
+            self._replacement_thickness_edit,
+            self._replacement_width_edit,
+            self._plate_length_edit,
+            self._plate_width_edit,
+            self._plate_thickness_edit,
+            self._base_plate_height_edit,
+            self._upper_vertical_load_edit,
+            self._upper_horizontal_load_edit,
+            self._bearing_capacity_edit,
+        ]
+        for edit in float_inputs:
+            edit.setValidator(positive_float_validator)
+
+        self._foundation_count_edit.setValidator(positive_int_validator)
+
+        self._base_length_edit.setPlaceholderText("例如 2.5")
+        self._base_bottom_width_edit.setPlaceholderText("例如 2.0")
+        self._base_height_edit.setPlaceholderText("例如 2.2")
+        self._cushion_thickness_edit.setPlaceholderText("例如 100")
+        self._upper_vertical_load_edit.setPlaceholderText("例如 120")
+        self._bearing_capacity_edit.setPlaceholderText("例如 180")
+        self._foundation_count_edit.setPlaceholderText("默认 1")
+
+    def _set_input_error_style(self, edit: QLineEdit, has_error: bool):
+        """设置输入框错误样式"""
+        if has_error:
+            edit.setStyleSheet(
+                "QLineEdit { border: 1px solid #e74c3c; background: #fff6f6; }"
+            )
+        else:
+            edit.setStyleSheet("")
+
+    def _validate_required_fields(self) -> bool:
+        """校验关键必填字段（含按基础样式动态必填项）"""
+        required_fields = [
+            (self._base_length_edit, "底板长度"),
+            (self._base_bottom_width_edit, "底板宽度"),
+            (self._base_height_edit, "基础高度"),
+            (self._base_height_above_ground_edit, "基础高出地面高度"),
+            (self._cushion_thickness_edit, "垫层厚度"),
+            (self._upper_vertical_load_edit, "上部垂直荷载"),
+            (self._bearing_capacity_edit, "地基承载力"),
+        ]
+
+        if self._foundation_style_combo.currentText() == "T型基础":
+            required_fields.extend([
+                (self._base_column_length_edit, "基础短柱长度"),
+                (self._base_column_width_edit, "基础短柱宽度"),
+                (self._base_plate_height_edit, "底板高度"),
+            ])
+        else:
+            required_fields.append((self._base_top_width_edit, "基础顶面宽度"))
+
+        missing = []
+        for edit, name in required_fields:
+            empty = not edit.text().strip()
+            self._set_input_error_style(edit, empty)
+            if empty:
+                missing.append(name)
+
+        if missing:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "输入不完整", f"请先填写必填项：{', '.join(missing)}")
+            return False
+
+        return True
+
     def _init_ui(self):
         """初始化UI"""
         # 创建滚动区域
@@ -46,47 +132,47 @@ class PipeSupportWidget(QWidget):
         scroll_area.setWidgetResizable(True)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        
+
         # 滚动区域的容器Widget
         scroll_widget = QWidget()
-        
+        scroll_widget.setObjectName("pipeSupportScrollWidget")
+
         # 主布局：垂直布局，包含标题、参数区域和结果区域
         main_layout = QVBoxLayout(scroll_widget)
-        
+
         # 添加标题
         title_label = QLabel("管墩计算")
-        title_label.setStyleSheet("font-size: 20px; font-weight: bold; margin-bottom: 10px;")
+        title_label.setObjectName("moduleTitle")
         title_label.setAlignment(Qt.AlignCenter)  # 设置文字居中
         main_layout.addWidget(title_label)
-        
+
         # 参数区域：水平布局，左侧是基础尺寸+预埋钢板参数，右侧是基础形式+荷载参数+计算按钮
         params_layout = QHBoxLayout()
-        
+
         # 左侧列：基础尺寸 + 预埋钢板参数（垂直排列）
         outer_left_column = QVBoxLayout()
-        
+
         # 基础尺寸输入组
         base_size_group = QGroupBox("基础尺寸")
+        base_size_group.setProperty("moduleCard", True)
         base_size_group.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         base_size_group.setMaximumWidth(500)  # 缩小最大宽度
-        # 设置组标题背景透明
-        base_size_group.setStyleSheet("QGroupBox { background-color: transparent; }")
         base_size_layout = QVBoxLayout(base_size_group)
-        
+
         # 单位标签宽度
         unit_label_width = 30
-        
+
         # 创建两列布局
         columns_layout = QHBoxLayout()
         columns_layout.setSpacing(15)  # 缩小列间距
-        
+
         # 标签宽度
         label_width = 100
-        
+
         # 左侧列
         left_column = QVBoxLayout()
         left_column.setSpacing(8)  # 缩小垂直间距
-        
+
         # 底板长度
         self._base_length_layout = QHBoxLayout()
         self._base_length_layout.setSpacing(10)
@@ -99,7 +185,7 @@ class PipeSupportWidget(QWidget):
         unit_label.setFixedWidth(unit_label_width)
         self._base_length_layout.addWidget(unit_label)
         left_column.addLayout(self._base_length_layout)
-        
+
         # 底板宽度
         self._base_bottom_width_layout = QHBoxLayout()
         self._base_bottom_width_layout.setSpacing(10)
@@ -112,7 +198,7 @@ class PipeSupportWidget(QWidget):
         unit_label.setFixedWidth(unit_label_width)
         self._base_bottom_width_layout.addWidget(unit_label)
         left_column.addLayout(self._base_bottom_width_layout)
-        
+
         # 基础短柱长度
         self._base_column_length_layout = QHBoxLayout()
         self._base_column_length_layout.setSpacing(10)
@@ -120,12 +206,13 @@ class PipeSupportWidget(QWidget):
         label.setFixedWidth(label_width)
         self._base_column_length_layout.addWidget(label)
         self._base_column_length_edit = QLineEdit()
-        self._base_column_length_layout.addWidget(self._base_column_length_edit)
+        self._base_column_length_layout.addWidget(
+            self._base_column_length_edit)
         unit_label = QLabel("m")
         unit_label.setFixedWidth(unit_label_width)
         self._base_column_length_layout.addWidget(unit_label)
         left_column.addLayout(self._base_column_length_layout)
-        
+
         # 基础短柱宽度
         self._base_column_width_layout = QHBoxLayout()
         self._base_column_width_layout.setSpacing(10)
@@ -138,7 +225,7 @@ class PipeSupportWidget(QWidget):
         unit_label.setFixedWidth(unit_label_width)
         self._base_column_width_layout.addWidget(unit_label)
         left_column.addLayout(self._base_column_width_layout)
-        
+
         # 基础顶面宽度
         self._base_top_width_layout = QHBoxLayout()
         self._base_top_width_layout.setSpacing(10)
@@ -151,7 +238,7 @@ class PipeSupportWidget(QWidget):
         unit_label.setFixedWidth(unit_label_width)
         self._base_top_width_layout.addWidget(unit_label)
         left_column.addLayout(self._base_top_width_layout)
-        
+
         # 基础高度
         self._base_height_layout = QHBoxLayout()
         self._base_height_layout.setSpacing(10)
@@ -164,11 +251,11 @@ class PipeSupportWidget(QWidget):
         unit_label.setFixedWidth(unit_label_width)
         self._base_height_layout.addWidget(unit_label)
         left_column.addLayout(self._base_height_layout)
-        
+
         # 右侧列
         right_column = QVBoxLayout()
         right_column.setSpacing(8)  # 缩小垂直间距
-        
+
         # 基础高出地面高度
         self._base_height_above_ground_layout = QHBoxLayout()
         self._base_height_above_ground_layout.setSpacing(10)
@@ -176,12 +263,13 @@ class PipeSupportWidget(QWidget):
         label.setFixedWidth(label_width)
         self._base_height_above_ground_layout.addWidget(label)
         self._base_height_above_ground_edit = QLineEdit()
-        self._base_height_above_ground_layout.addWidget(self._base_height_above_ground_edit)
+        self._base_height_above_ground_layout.addWidget(
+            self._base_height_above_ground_edit)
         unit_label = QLabel("m")
         unit_label.setFixedWidth(unit_label_width)
         self._base_height_above_ground_layout.addWidget(unit_label)
         right_column.addLayout(self._base_height_above_ground_layout)
-        
+
         # 垫层厚度（单位改为mm）
         self._cushion_thickness_layout = QHBoxLayout()
         self._cushion_thickness_layout.setSpacing(10)
@@ -194,7 +282,7 @@ class PipeSupportWidget(QWidget):
         unit_label.setFixedWidth(unit_label_width)
         self._cushion_thickness_layout.addWidget(unit_label)
         right_column.addLayout(self._cushion_thickness_layout)
-        
+
         # 换填级配砂石厚度
         self._replacement_thickness_layout = QHBoxLayout()
         self._replacement_thickness_layout.setSpacing(10)
@@ -202,12 +290,13 @@ class PipeSupportWidget(QWidget):
         label.setFixedWidth(label_width)
         self._replacement_thickness_layout.addWidget(label)
         self._replacement_thickness_edit = QLineEdit()
-        self._replacement_thickness_layout.addWidget(self._replacement_thickness_edit)
+        self._replacement_thickness_layout.addWidget(
+            self._replacement_thickness_edit)
         unit_label = QLabel("m")
         unit_label.setFixedWidth(unit_label_width)
         self._replacement_thickness_layout.addWidget(unit_label)
         right_column.addLayout(self._replacement_thickness_layout)
-        
+
         # 换填级配砂石宽度
         self._replacement_width_layout = QHBoxLayout()
         self._replacement_width_layout.setSpacing(10)
@@ -220,7 +309,7 @@ class PipeSupportWidget(QWidget):
         unit_label.setFixedWidth(unit_label_width)
         self._replacement_width_layout.addWidget(unit_label)
         right_column.addLayout(self._replacement_width_layout)
-        
+
         # 基础数量
         self._foundation_count_layout = QHBoxLayout()
         self._foundation_count_layout.setSpacing(10)
@@ -233,23 +322,23 @@ class PipeSupportWidget(QWidget):
         unit_label.setFixedWidth(unit_label_width)
         self._foundation_count_layout.addWidget(unit_label)
         right_column.addLayout(self._foundation_count_layout)
-        
+
         # 将左右列添加到两列布局
         columns_layout.addLayout(left_column)
         columns_layout.addLayout(right_column)
-        
+
         # 将两列布局添加到基础尺寸布局
         base_size_layout.addLayout(columns_layout)
-        
+
         outer_left_column.addWidget(base_size_group)
-        
+
         # 预埋钢板参数输入组
         embedded_plate_group = QGroupBox("预埋钢板参数")
-        embedded_plate_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        # 设置组标题背景透明
-        embedded_plate_group.setStyleSheet("QGroupBox { background-color: transparent; }")
+        embedded_plate_group.setProperty("moduleCard", True)
+        embedded_plate_group.setSizePolicy(QSizePolicy.Preferred,
+                                           QSizePolicy.Fixed)
         embedded_plate_layout = QHBoxLayout(embedded_plate_group)
-        
+
         # 预埋钢板长度
         self._plate_length_layout = QHBoxLayout()
         self._plate_length_layout.addWidget(QLabel("长度:"))
@@ -257,7 +346,7 @@ class PipeSupportWidget(QWidget):
         self._plate_length_layout.addWidget(self._plate_length_edit)
         self._plate_length_layout.addWidget(QLabel("m"))
         embedded_plate_layout.addLayout(self._plate_length_layout)
-        
+
         # 预埋钢板宽度
         self._plate_width_layout = QHBoxLayout()
         self._plate_width_layout.addWidget(QLabel("宽度:"))
@@ -265,7 +354,7 @@ class PipeSupportWidget(QWidget):
         self._plate_width_layout.addWidget(self._plate_width_edit)
         self._plate_width_layout.addWidget(QLabel("m"))
         embedded_plate_layout.addLayout(self._plate_width_layout)
-        
+
         # 预埋钢板厚度
         self._plate_thickness_layout = QHBoxLayout()
         self._plate_thickness_layout.addWidget(QLabel("厚度:"))
@@ -273,21 +362,21 @@ class PipeSupportWidget(QWidget):
         self._plate_thickness_layout.addWidget(self._plate_thickness_edit)
         self._plate_thickness_layout.addWidget(QLabel("mm"))
         embedded_plate_layout.addLayout(self._plate_thickness_layout)
-        
+
         # 创建预埋钢板布局
         plate_layout = QHBoxLayout()
         plate_layout.addWidget(embedded_plate_group)
-        
+
         outer_left_column.addLayout(plate_layout)
-        
+
         # 其它参数输入组
         pipe_support_form_group = QGroupBox("其它参数")
-        pipe_support_form_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        # 设置组标题背景透明
-        pipe_support_form_group.setStyleSheet("QGroupBox { background-color: transparent; }")
+        pipe_support_form_group.setProperty("moduleCard", True)
+        pipe_support_form_group.setSizePolicy(QSizePolicy.Preferred,
+                                              QSizePolicy.Fixed)
         pipe_support_form_layout = QHBoxLayout(pipe_support_form_group)
         pipe_support_form_layout.setSpacing(20)  # 设置间距
-        
+
         # 管墩形式选择
         self._pipe_support_type_layout = QHBoxLayout()
         self._pipe_support_type_layout.addWidget(QLabel("管墩形式:"))
@@ -297,7 +386,7 @@ class PipeSupportWidget(QWidget):
         self._pipe_support_type_combo.setCurrentText("固定墩")
         self._pipe_support_type_layout.addWidget(self._pipe_support_type_combo)
         pipe_support_form_layout.addLayout(self._pipe_support_type_layout)
-        
+
         # 是否考虑地下水选择
         self._consider_groundwater_layout = QHBoxLayout()
         self._consider_groundwater_layout.addWidget(QLabel("是否考虑地下水:"))
@@ -305,28 +394,29 @@ class PipeSupportWidget(QWidget):
         self._consider_groundwater_combo.addItems(["否", "是"])
         # 默认选择否
         self._consider_groundwater_combo.setCurrentText("否")
-        self._consider_groundwater_layout.addWidget(self._consider_groundwater_combo)
+        self._consider_groundwater_layout.addWidget(
+            self._consider_groundwater_combo)
         pipe_support_form_layout.addLayout(self._consider_groundwater_layout)
-        
+
         # 创建管墩形式布局
         support_form_layout = QHBoxLayout()
         support_form_layout.addWidget(pipe_support_form_group)
-        
+
         outer_left_column.addLayout(support_form_layout)
-        
+
         # 添加伸缩空间，使左侧列高度与右侧列保持一致
         outer_left_column.addStretch()
-        
+
         # 右侧列：添加基础形式组
         right_column = QVBoxLayout()
-        
+
         # 基础形式输入组
         foundation_form_group = QGroupBox("基础形式")
-        foundation_form_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        # 设置组标题背景透明
-        foundation_form_group.setStyleSheet("QGroupBox { background-color: transparent; }")
+        foundation_form_group.setProperty("moduleCard", True)
+        foundation_form_group.setSizePolicy(QSizePolicy.Preferred,
+                                            QSizePolicy.Fixed)
         foundation_form_layout = QVBoxLayout(foundation_form_group)
-        
+
         # 基础样式选择
         self._foundation_style_layout = QHBoxLayout()
         self._foundation_style_layout.addWidget(QLabel("基础样式:"))
@@ -336,7 +426,7 @@ class PipeSupportWidget(QWidget):
         self._foundation_style_combo.setCurrentText("T型基础")
         self._foundation_style_layout.addWidget(self._foundation_style_combo)
         foundation_form_layout.addLayout(self._foundation_style_layout)
-        
+
         # 底板高度
         self._base_plate_height_layout = QHBoxLayout()
         self._base_plate_height_layout.addWidget(QLabel("底板高度:"))
@@ -346,32 +436,34 @@ class PipeSupportWidget(QWidget):
         self._base_plate_height_layout.addWidget(self._base_plate_height_edit)
         self._base_plate_height_layout.addWidget(QLabel("m"))
         foundation_form_layout.addLayout(self._base_plate_height_layout)
-        
+
         right_column.addWidget(foundation_form_group)
-        
+
         # 荷载参数输入组
         load_params_group = QGroupBox("荷载参数")
-        load_params_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        # 设置组标题背景透明
-        load_params_group.setStyleSheet("QGroupBox { background-color: transparent; }")
+        load_params_group.setProperty("moduleCard", True)
+        load_params_group.setSizePolicy(QSizePolicy.Preferred,
+                                        QSizePolicy.Fixed)
         load_params_layout = QVBoxLayout(load_params_group)
-        
+
         # 上部垂直荷载
         self._upper_vertical_load_layout = QHBoxLayout()
         self._upper_vertical_load_layout.addWidget(QLabel("上部垂直荷载:"))
         self._upper_vertical_load_edit = QLineEdit()
-        self._upper_vertical_load_layout.addWidget(self._upper_vertical_load_edit)
+        self._upper_vertical_load_layout.addWidget(
+            self._upper_vertical_load_edit)
         self._upper_vertical_load_layout.addWidget(QLabel("KN"))
         load_params_layout.addLayout(self._upper_vertical_load_layout)
-        
+
         # 上部水平荷载
         self._upper_horizontal_load_layout = QHBoxLayout()
         self._upper_horizontal_load_layout.addWidget(QLabel("上部水平荷载:"))
         self._upper_horizontal_load_edit = QLineEdit()
-        self._upper_horizontal_load_layout.addWidget(self._upper_horizontal_load_edit)
+        self._upper_horizontal_load_layout.addWidget(
+            self._upper_horizontal_load_edit)
         self._upper_horizontal_load_layout.addWidget(QLabel("KN"))
         load_params_layout.addLayout(self._upper_horizontal_load_layout)
-        
+
         # 地基承载力
         self._bearing_capacity_layout = QHBoxLayout()
         self._bearing_capacity_layout.addWidget(QLabel("地基承载力:"))
@@ -379,162 +471,122 @@ class PipeSupportWidget(QWidget):
         self._bearing_capacity_layout.addWidget(self._bearing_capacity_edit)
         self._bearing_capacity_layout.addWidget(QLabel("kPa"))
         load_params_layout.addLayout(self._bearing_capacity_layout)
-        
+
         right_column.addWidget(load_params_group)
-        
+
         # 计算按钮区域 - 垂直布局
         calculate_layout = QVBoxLayout()
-        
+
         # 计算按钮
         self._calculate_btn = QPushButton("计算")
-        self._calculate_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3498DB, stop:1 #2980B9);
-                color: white;
-                border: 1px solid #2471A3;
-                border-radius: 8px;
-                padding: 10px 20px;
-                font-size: 14px;
-                min-width: 100px;
-                margin-bottom: 10px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3aade0, stop:1 #3498DB);
-                border: 1px solid #2980B9;
-            }
-            QPushButton:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2471A3, stop:1 #1f638c);
-            }
-        """)
+        self._calculate_btn.setProperty("moduleAction", "primary")
         calculate_layout.addWidget(self._calculate_btn)
-        
+
         # 导出计算书按钮
         self._export_btn = QPushButton("导出计算书")
-        self._export_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2ecc71, stop:1 #27ae60);
-                color: white;
-                border: 1px solid #229954;
-                border-radius: 8px;
-                padding: 10px 20px;
-                font-size: 14px;
-                min-width: 120px;
-                margin-bottom: 10px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #32e17c, stop:1 #2ecc71);
-                border: 1px solid #27ae60;
-            }
-            QPushButton:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #229954, stop:1 #1e8449);
-            }
-        """)
+        self._export_btn.setProperty("moduleAction", "secondary")
         calculate_layout.addWidget(self._export_btn)
+
+        # 重置按钮
+        self._reset_btn = QPushButton("重置")
+        self._reset_btn.setProperty("moduleAction", "ghost")
+        calculate_layout.addWidget(self._reset_btn)
 
         # 导出料表按钮
         self._export_material_btn = QPushButton("导出料表")
-        self._export_material_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3498db, stop:1 #2980b9);
-                color: white;
-                border: 1px solid #2471A3;
-                border-radius: 8px;
-                padding: 10px 20px;
-                font-size: 14px;
-                min-width: 120px;
-                margin-bottom: 10px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5dade2, stop:1 #3498db);
-                border: 1px solid #2980b9;
-            }
-            QPushButton:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2471A3, stop:1 #1f638b);
-            }
-        """)
+        self._export_material_btn.setProperty("moduleAction", "secondary")
         calculate_layout.addWidget(self._export_material_btn)
         calculate_layout.addStretch()  # 添加弹簧使按钮顶部对齐
-        
+
         right_column.addLayout(calculate_layout)
-        
+
         # 添加伸缩空间
         right_column.addStretch()
-        
+
         # 将左右列添加到参数布局
         params_layout.addLayout(outer_left_column)
         params_layout.addLayout(right_column)
-        
+
         # 将参数布局添加到主布局
         main_layout.addLayout(params_layout)
-        
+
         # 输出结果显示区域：放在主布局的最下面，通过滚动条访问
         result_group = QGroupBox("输出结果")
+        result_group.setProperty("moduleCard", True)
         result_layout = QVBoxLayout(result_group)
-        
+
         # 结果显示文本框
         self._result_text = QTextEdit()
         self._result_text.setReadOnly(True)
         self._result_text.setMinimumHeight(400)  # 输出结果显示框的最小高度
         # 设置自定义上下文菜单策略
-        self._result_text.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._result_text.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu)
         # 连接上下文菜单信号
-        self._result_text.customContextMenuRequested.connect(self._on_result_text_context_menu)
+        self._result_text.customContextMenuRequested.connect(
+            self._on_result_text_context_menu)
         result_layout.addWidget(self._result_text)
-        
+
         # 将结果区域添加到主布局的最下面
         main_layout.addWidget(result_group)
-        
+
         # 设置滚动区域的Widget
         scroll_area.setWidget(scroll_widget)
-        
+
         # 设置主布局
         main_widget_layout = QVBoxLayout(self)
         main_widget_layout.addWidget(scroll_area)
-        
+
         # 为所有QLineEdit控件设置自定义上下文菜单
         for widget in self.findChildren(QLineEdit):
             widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-            widget.customContextMenuRequested.connect(self._on_input_context_menu)
-        
+            widget.customContextMenuRequested.connect(
+                self._on_input_context_menu)
+
         # 初始化时根据默认选择的基础样式隐藏/显示相应的输入字段
         # 默认选择的是T型基础，所以需要隐藏基础顶面宽度输入框
         for i in range(self._base_top_width_layout.count()):
             widget = self._base_top_width_layout.itemAt(i).widget()
             if widget:
                 widget.hide()
-        
+
     def _connect_signals(self):
         """连接信号和槽"""
         # 连接计算按钮的点击信号
         self._calculate_btn.clicked.connect(self._on_calculate_clicked)
+        # 连接重置按钮的点击信号
+        self._reset_btn.clicked.connect(self.reset)
         # 连接导出计算书按钮的点击信号
         self._export_btn.clicked.connect(self._on_export_triggered)
         # 连接导出料表按钮的点击信号
-        self._export_material_btn.clicked.connect(self._on_export_material_triggered)
+        self._export_material_btn.clicked.connect(
+            self._on_export_material_triggered)
         # 连接基础样式变化信号
-        self._foundation_style_combo.currentTextChanged.connect(self._on_foundation_style_changed)
+        self._foundation_style_combo.currentTextChanged.connect(
+            self._on_foundation_style_changed)
         # 连接管墩形式变化信号
-        self._pipe_support_type_combo.currentTextChanged.connect(self._on_pipe_support_type_changed)
-    
+        self._pipe_support_type_combo.currentTextChanged.connect(
+            self._on_pipe_support_type_changed)
+
     @Slot()
     def _on_result_text_context_menu(self, pos):
         """处理输出结果文本框的上下文菜单请求"""
         from PySide6.QtWidgets import QMenu
-        
+
         # 创建上下文菜单
         menu = QMenu(self._result_text)
-        
+
         # 添加复制选项
         copy_action = menu.addAction("复制 (Ctrl+C)")
         copy_action.triggered.connect(self._result_text.copy)
-        
+
         # 添加全选选项
         select_all_action = menu.addAction("全选 (Ctrl+A)")
         select_all_action.triggered.connect(self._result_text.selectAll)
-        
+
         # 显示菜单
         menu.exec_(self._result_text.mapToGlobal(pos))
-    
+
     @Slot()
     def _on_foundation_style_changed(self, style):
         """处理基础样式变化事件"""
@@ -585,121 +637,153 @@ class PipeSupportWidget(QWidget):
                 widget = self._base_top_width_layout.itemAt(i).widget()
                 if widget:
                     widget.hide()
-    
+
     @Slot()
     def _on_pipe_support_type_changed(self, support_type):
         """处理管墩形式变化事件"""
         # 这里可以添加管墩形式变化的处理逻辑
-        pass    
+        pass
+
     @Slot()
     def _on_input_context_menu(self, pos):
         """处理输入控件的上下文菜单请求"""
         from PySide6.QtWidgets import QMenu
-        
+
         # 获取发送信号的控件
         sender = self.sender()
         if not sender:
             return
-        
+
         # 创建上下文菜单
         menu = QMenu(sender)
-        
+
         # 添加撤销选项
         undo_action = menu.addAction("撤销 (Ctrl+Z)")
         undo_action.triggered.connect(sender.undo)
-        
+
         # 添加重做选项
         redo_action = menu.addAction("重做 (Ctrl+Y)")
         redo_action.triggered.connect(sender.redo)
-        
+
         menu.addSeparator()
-        
+
         # 添加剪切选项
         cut_action = menu.addAction("剪切 (Ctrl+X)")
         cut_action.triggered.connect(sender.cut)
-        
+
         # 添加复制选项
         copy_action = menu.addAction("复制 (Ctrl+C)")
         copy_action.triggered.connect(sender.copy)
-        
+
         # 添加粘贴选项
         paste_action = menu.addAction("粘贴 (Ctrl+V)")
         paste_action.triggered.connect(sender.paste)
-        
+
         menu.addSeparator()
-        
+
         # 添加删除选项
         delete_action = menu.addAction("删除")
         delete_action.triggered.connect(sender.del_)
-        
+
         menu.addSeparator()
-        
+
         # 添加全选选项
         select_all_action = menu.addAction("全选 (Ctrl+A)")
         select_all_action.triggered.connect(sender.selectAll)
-        
+
         # 显示菜单
         menu.exec_(sender.mapToGlobal(pos))
-    
 
-    
     @Slot()
     def _on_calculate_clicked(self):
         """计算按钮点击事件"""
         try:
+            if not self._validate_required_fields():
+                return
+
             # 获取输入值并转换为数值类型
-            base_length = float(self._base_length_edit.text()) if self._base_length_edit.text() else 0
-            base_bottom_width = float(self._base_bottom_width_edit.text()) if self._base_bottom_width_edit.text() else 0
-            base_column_length = float(self._base_column_length_edit.text()) if self._base_column_length_edit.text() else 0
-            base_column_width = float(self._base_column_width_edit.text()) if self._base_column_width_edit.text() else 0
-            base_height = float(self._base_height_edit.text()) if self._base_height_edit.text() else 0
-            base_height_above_ground = float(self._base_height_above_ground_edit.text()) if self._base_height_above_ground_edit.text() else 0
+            base_length = float(self._base_length_edit.text()
+                                ) if self._base_length_edit.text() else 0
+            base_bottom_width = float(self._base_bottom_width_edit.text(
+            )) if self._base_bottom_width_edit.text() else 0
+            base_column_length = float(self._base_column_length_edit.text(
+            )) if self._base_column_length_edit.text() else 0
+            base_column_width = float(self._base_column_width_edit.text(
+            )) if self._base_column_width_edit.text() else 0
+            base_height = float(self._base_height_edit.text()
+                                ) if self._base_height_edit.text() else 0
+            base_height_above_ground = float(
+                self._base_height_above_ground_edit.text(
+                )) if self._base_height_above_ground_edit.text() else 0
             # 计算基底埋深：基础高度减去基础高出地面高度
             depth = base_height - base_height_above_ground
             # 注意：垫层厚度单位已改为mm，需要转换为m
-            cushion_thickness = float(self._cushion_thickness_edit.text()) / 1000 if self._cushion_thickness_edit.text() else 0
-            replacement_width = float(self._replacement_width_edit.text()) if self._replacement_width_edit.text() else 0
-            replacement_thickness = float(self._replacement_thickness_edit.text()) if self._replacement_thickness_edit.text() else 0
-            
+            cushion_thickness = float(self._cushion_thickness_edit.text(
+            )) / 1000 if self._cushion_thickness_edit.text() else 0
+            replacement_width = float(self._replacement_width_edit.text(
+            )) if self._replacement_width_edit.text() else 0
+            replacement_thickness = float(
+                self._replacement_thickness_edit.text(
+                )) if self._replacement_thickness_edit.text() else 0
+
             # 获取基础个数
-            foundation_count = int(self._foundation_count_edit.text()) if self._foundation_count_edit.text() else 1  # 默认1个
-            
+            foundation_count = int(self._foundation_count_edit.text(
+            )) if self._foundation_count_edit.text() else 1  # 默认1个
+
             # 获取基础形式参数
             foundation_style = self._foundation_style_combo.currentText()
             # 获取底板高度（仅T型基础有效）
-            base_plate_height = float(self._base_plate_height_edit.text()) if self._base_plate_height_edit.text() else 0
+            base_plate_height = float(self._base_plate_height_edit.text(
+            )) if self._base_plate_height_edit.text() else 0
             # 获取基础顶面宽度（仅梯形基础有效）
-            base_top_width = float(self._base_top_width_edit.text()) if self._base_top_width_edit.text() else 0
+            base_top_width = float(self._base_top_width_edit.text()
+                                   ) if self._base_top_width_edit.text() else 0
             # 获取管墩形式
             pipe_support_type = self._pipe_support_type_combo.currentText()
             # 获取地下水考虑选项
-            consider_groundwater = self._consider_groundwater_combo.currentText()
+            consider_groundwater = self._consider_groundwater_combo.currentText(
+            )
             # 计算覆土重度：考虑地下水时为10 KN/m³，否则为18 KN/m³
             soil_density = 10 if consider_groundwater == "是" else 18
             # 获取荷载参数
-            upper_vertical_load = float(self._upper_vertical_load_edit.text()) if self._upper_vertical_load_edit.text() else 0
-            upper_horizontal_load = float(self._upper_horizontal_load_edit.text()) if self._upper_horizontal_load_edit.text() else 0
+            upper_vertical_load = float(self._upper_vertical_load_edit.text(
+            )) if self._upper_vertical_load_edit.text() else 0
+            upper_horizontal_load = float(
+                self._upper_horizontal_load_edit.text(
+                )) if self._upper_horizontal_load_edit.text() else 0
             # 获取地基承载力
-            bearing_capacity = float(self._bearing_capacity_edit.text()) if self._bearing_capacity_edit.text() else 0
-            
+            bearing_capacity = float(self._bearing_capacity_edit.text(
+            )) if self._bearing_capacity_edit.text() else 0
+
             # 调用计算方法（单个基础）
-            basic_volume_single = self._logic.calculate_basic_volume(base_length, base_bottom_width, base_top_width, base_height, base_column_length, base_column_width, base_plate_height, foundation_style)
-            cushion_volume_single = self._logic.calculate_cushion_volume(base_length, base_bottom_width, cushion_thickness, foundation_style)
-            replacement_volume_single = self._logic.calculate_replacement_volume(base_length, base_bottom_width, replacement_width, replacement_thickness, foundation_style)
-            
+            basic_volume_single = self._logic.calculate_basic_volume(
+                base_length, base_bottom_width, base_top_width, base_height,
+                base_column_length, base_column_width, base_plate_height,
+                foundation_style)
+            cushion_volume_single = self._logic.calculate_cushion_volume(
+                base_length, base_bottom_width, cushion_thickness,
+                foundation_style)
+            replacement_volume_single = self._logic.calculate_replacement_volume(
+                base_length, base_bottom_width, replacement_width,
+                replacement_thickness, foundation_style)
+
             # 获取预埋钢板参数
-            plate_length = float(self._plate_length_edit.text()) if self._plate_length_edit.text() else 0
-            plate_width = float(self._plate_width_edit.text()) if self._plate_width_edit.text() else 0
-            plate_thickness = float(self._plate_thickness_edit.text()) if self._plate_thickness_edit.text() else 0
-            
+            plate_length = float(self._plate_length_edit.text()
+                                 ) if self._plate_length_edit.text() else 0
+            plate_width = float(self._plate_width_edit.text()
+                                ) if self._plate_width_edit.text() else 0
+            plate_thickness = float(self._plate_thickness_edit.text(
+            )) if self._plate_thickness_edit.text() else 0
+
             # 计算预埋钢板体积（单个基础）
-            plate_volume_single = self._logic.calculate_plate_volume(plate_length, plate_width, plate_thickness)
-            
+            plate_volume_single = self._logic.calculate_plate_volume(
+                plate_length, plate_width, plate_thickness)
+
             # 计算钢材重量（单个基础）- 仅计算预埋钢板重量
             total_steel_volume_single = plate_volume_single
             steel_weight_kg_single = total_steel_volume_single * 7850  # 钢材密度：7850 kg/m³
             steel_weight_single = steel_weight_kg_single / 1000  # 转换为吨(t)
-            
+
             # 乘以基础个数，得到最终结果
             basic_volume = basic_volume_single * foundation_count
             cushion_volume = cushion_volume_single * foundation_count
@@ -707,42 +791,38 @@ class PipeSupportWidget(QWidget):
             steel_weight = steel_weight_single * foundation_count
             steel_weight_kg = steel_weight_kg_single * foundation_count
             plate_volume = plate_volume_single * foundation_count
-            
+
             # 计算基础防腐面积（单个基础）
-            anticorrosion_area_single = self._logic.calculate_anticorrosion_area(base_length, base_bottom_width, depth, base_column_length, base_column_width, base_plate_height, foundation_style, base_top_width)
+            anticorrosion_area_single = self._logic.calculate_anticorrosion_area(
+                base_length, base_bottom_width, depth, base_column_length,
+                base_column_width, base_plate_height, foundation_style,
+                base_top_width)
             # 乘以基础个数，得到最终结果
             anticorrosion_area = anticorrosion_area_single * foundation_count
-            
+
             # 验算地基承载力（单个基础）
             bearing_check_result_single = self._logic.check_bearing_capacity(
-                upper_vertical_load,
-                base_length,
-                base_bottom_width,
-                base_height,
-                bearing_capacity,
-                foundation_style,
-                base_column_length,
-                base_column_width,
-                base_plate_height,
-                base_height_above_ground,
-                upper_horizontal_load,
-                consider_groundwater,
-                base_top_width
-            )
+                upper_vertical_load, base_length, base_bottom_width,
+                base_height, bearing_capacity, foundation_style,
+                base_column_length, base_column_width, base_plate_height,
+                base_height_above_ground, upper_horizontal_load,
+                consider_groundwater, base_top_width)
             # 计算总基础的地基承载力验算（对于单个基础，结果相同）
             is_bearing_satisfied, basic_weight, soil_load, total_load, base_pressure, concrete_density, pkmax, pkmin, base_moment, section_modulus = bearing_check_result_single
-            
+
             # 计算基底埋深：基础高度减去基础高出地面高度
             depth = base_height - base_height_above_ground
             # 计算地基承载力修正值
             # 地基承载力修正值 = 地基承载力输入值 + 1 * 计算覆土重度 * (基础高度 - 基础高出地面高度 - 0.5)
-            bearing_capacity_corrected = bearing_capacity + 1 * soil_density * (depth - 0.5)
+            bearing_capacity_corrected = bearing_capacity + 1 * soil_density * (
+                depth - 0.5)
             # 确保修正后的地基承载力不小于原始值
-            bearing_capacity_corrected = max(bearing_capacity_corrected, bearing_capacity)
-            
+            bearing_capacity_corrected = max(bearing_capacity_corrected,
+                                             bearing_capacity)
+
             # 计算1.2倍的地基承载力修正值
             bearing_capacity_corrected_12 = 1.2 * bearing_capacity_corrected
-            
+
             # 综合判断地基承载力是否满足要求
             if upper_horizontal_load == 0 or foundation_style != "T型基础":
                 # 当水平荷载为0或非T型基础时，只检查地基承载力
@@ -750,7 +830,8 @@ class PipeSupportWidget(QWidget):
                 bearing_check_result = "✅ 满足要求" if is_bearing_satisfied else "❌ 不满足要求（平均压力超过地基承载力）"
             else:
                 # 当水平荷载不为0且为T型基础时，检查所有条件
-                is_bearing_satisfied_final = is_bearing_satisfied and (pkmax <= bearing_capacity_corrected_12) and (pkmin >= 0)
+                is_bearing_satisfied_final = is_bearing_satisfied and (
+                    pkmax <= bearing_capacity_corrected_12) and (pkmin >= 0)
                 # 生成判断结果信息
                 bearing_check_result = "✅ 满足要求"
                 if not is_bearing_satisfied:
@@ -759,7 +840,7 @@ class PipeSupportWidget(QWidget):
                     bearing_check_result = "❌ 不满足要求（最大压力超过1.2倍地基承载力修正值）"
                 elif pkmin <= 0:
                     bearing_check_result = "⚠️ Pkmin<0，需要验算零应力区"
-            
+
             # 计算抗倾覆（仅梯形基础）
             overturning_check_result = None
             is_overturning_satisfied = False
@@ -771,20 +852,13 @@ class PipeSupportWidget(QWidget):
             if foundation_style != "T型基础":
                 # 调用抗倾覆验算方法
                 overturning_check_result = self._logic.check_overturning(
-                    upper_vertical_load,
-                    upper_horizontal_load,
-                    base_length,
-                    base_bottom_width,
-                    base_height,
-                    foundation_style,
-                    base_column_length,
-                    base_column_width,
-                    base_plate_height,
-                    base_top_width
-                )
+                    upper_vertical_load, upper_horizontal_load, base_length,
+                    base_bottom_width, base_height, foundation_style,
+                    base_column_length, base_column_width, base_plate_height,
+                    base_top_width)
                 # 解包抗倾覆验算结果
                 is_overturning_satisfied, resisting_moment, overturning_moment, safety_factor, overturning_total_vertical_load, arm_length = overturning_check_result
-            
+
             # 生成基础体积计算的HTML
             if foundation_style == "T型基础":
                 foundation_volume_html = f"""
@@ -798,19 +872,19 @@ class PipeSupportWidget(QWidget):
                         <div class="formula">（一）单个基础体积：({base_bottom_width}m + {base_top_width}m) × {base_height}m / 2 × {base_length}m</div>
                         <div class="formula-result">= {basic_volume_single:.3f} m³</div>
                 """
-            
+
             # 生成垫层体积计算的HTML
             cushion_volume_html = f"""
                         <div class="formula">（一）单个基础垫层体积：({base_length}m + 2×0.1m) × ({base_bottom_width}m + 2×0.1m) × {cushion_thickness}m</div>
                         <div class="formula-result">= {cushion_volume_single:.3f} m³</div>
             """
-            
+
             # 生成换填级配砂石体积计算的HTML
             replacement_volume_html = f"""
                         <div class="formula">（一）单个基础换填级配砂石体积：({base_length}m + 2 × {replacement_width}m) × ({base_bottom_width}m + 2 × {replacement_width}m) × {replacement_thickness}m</div>
                         <div class="formula-result">= {replacement_volume_single:.3f} m³</div>
             """
-            
+
             # 生成基础防腐面积计算的HTML
             if foundation_style == "T型基础":
                 anticorrosion_area_html = f"""
@@ -822,7 +896,8 @@ class PipeSupportWidget(QWidget):
                 """
             else:
                 import math
-                slant_height = math.sqrt(depth ** 2 + ((base_bottom_width - base_top_width) / 2) ** 2)
+                slant_height = math.sqrt(depth**2 + (
+                    (base_bottom_width - base_top_width) / 2)**2)
                 anticorrosion_area_html = f"""
                         <div class="formula">（一）单个基础防腐面积</div>
                         <div class="formula">2个梯形侧面面积 = 2 × ({base_top_width}m + {base_bottom_width}m) × {depth}m / 2</div>
@@ -830,7 +905,7 @@ class PipeSupportWidget(QWidget):
                         <div class="formula">斜边长 = √({depth:.3f}² + {((base_bottom_width - base_top_width)/2):.3f}²) = {slant_height:.3f}m</div>
                         <div class="formula-result">= {anticorrosion_area_single:.3f} m²</div>
                 """
-            
+
             # 格式化输出结果为HTML格式
             result_html = f"""<html>
             <head>
@@ -1051,7 +1126,7 @@ class PipeSupportWidget(QWidget):
                         </div>
                         ''' if foundation_style != "T型基础" and overturning_check_result else ''}
                     </div>            </body>
-            </html>"""            
+            </html>"""
             # 存储计算结果到实例变量，供导出功能使用
             self._calculation_results = {
                 # 输入参数
@@ -1077,21 +1152,21 @@ class PipeSupportWidget(QWidget):
                 'upper_horizontal_load': upper_horizontal_load,
                 'bearing_capacity': bearing_capacity,
                 'base_plate_height': base_plate_height,
-                
+
                 # 单个基础计算结果
                 'basic_volume_single': basic_volume_single,
                 'cushion_volume_single': cushion_volume_single,
                 'replacement_volume_single': replacement_volume_single,
                 'steel_weight_single': steel_weight_single,
                 'anticorrosion_area_single': anticorrosion_area_single,
-                
+
                 # 总计算结果
                 'basic_volume': basic_volume,
                 'cushion_volume': cushion_volume,
                 'replacement_volume': replacement_volume,
                 'steel_weight': steel_weight,
                 'anticorrosion_area': anticorrosion_area,
-                
+
                 # 地基承载力验算结果
                 'is_bearing_satisfied': is_bearing_satisfied,
                 'is_bearing_satisfied_final': is_bearing_satisfied_final,
@@ -1107,20 +1182,21 @@ class PipeSupportWidget(QWidget):
                 'bearing_capacity_corrected': bearing_capacity_corrected,
                 'bearing_capacity_corrected_12': bearing_capacity_corrected_12,
                 'bearing_check_result': bearing_check_result,
-                
+
                 # 抗倾覆验算结果（仅梯形基础）
                 'overturning_check_result': overturning_check_result,
                 'is_overturning_satisfied': is_overturning_satisfied,
                 'resisting_moment': resisting_moment,
                 'overturning_moment': overturning_moment,
                 'safety_factor': safety_factor,
-                'overturning_total_vertical_load': overturning_total_vertical_load,
+                'overturning_total_vertical_load':
+                overturning_total_vertical_load,
                 'arm_length': arm_length
             }
-            
+
             # 设置HTML结果
             self._result_text.setHtml(result_html)
-        
+
         except ValueError as e:
             # 处理输入值转换错误
             error_html = f"""<html>
@@ -1170,7 +1246,7 @@ class PipeSupportWidget(QWidget):
                 error_message = "除零错误：请检查输入的参数是否为零"
             elif "float division by zero" in error_message:
                 error_message = "浮点除零错误：请检查输入的参数是否为零"
-            
+
             error_html = f"""<html>
             <head>
                 <style>
@@ -1190,7 +1266,7 @@ class PipeSupportWidget(QWidget):
             </body>
             </html>"""
             self._result_text.setHtml(error_html)
-    
+
     @Slot()
     @Slot()
     def _on_export_triggered(self):
@@ -1203,37 +1279,33 @@ class PipeSupportWidget(QWidget):
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "警告", "请先进行计算，获取计算结果后再导出计算书！")
             return
-        
+
         # 打开文件保存对话框
         from PySide6.QtWidgets import QFileDialog
         file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "保存计算书",
-            "管墩计算书.docx",
-            "Word 文档 (*.docx);;所有文件 (*)"
-        )
-        
+            self, "保存计算书", "管墩计算书.docx", "Word 文档 (*.docx);;所有文件 (*)")
+
         if not file_path:
             return
-        
+
         # 确保文件后缀为.docx
         if not file_path.endswith('.docx'):
             file_path += '.docx'
-        
+
         # 使用python-docx库创建Word文档
         try:
             from docx import Document
             from docx.shared import Inches, Pt, RGBColor
             from docx.enum.text import WD_ALIGN_PARAGRAPH
             from docx.oxml.ns import qn
-            
+
             # 创建文档
             doc = Document()
-            
+
             # 设置文档属性
             doc.core_properties.title = "管墩计算书"
             doc.core_properties.author = "符构工具箱"
-            
+
             # 设置默认字体为宋体，黑色
             for style in doc.styles:
                 if style.name == 'Normal':
@@ -1242,13 +1314,16 @@ class PipeSupportWidget(QWidget):
                     style.font.size = Pt(12)
                     style.font.color.rgb = RGBColor(0, 0, 0)  # 黑色
                     break
-            
+
             # 设置所有标题样式为黑色
-            for style_name in ['Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6']:
+            for style_name in [
+                    'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4',
+                    'Heading 5', 'Heading 6'
+            ]:
                 if style_name in doc.styles:
                     heading_style = doc.styles[style_name]
                     heading_style.font.color.rgb = RGBColor(0, 0, 0)  # 黑色
-            
+
             # 添加标题
             title = doc.add_heading("管墩计算书", 0)
             title.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -1257,7 +1332,7 @@ class PipeSupportWidget(QWidget):
             title_run._element.rPr.rFonts.set(qn('w:eastAsia'), '宋体')
             title_run.font.size = Pt(24)
             title_run.font.color.rgb = RGBColor(0, 0, 0)  # 黑色
-            
+
             # 添加日期
             import datetime
             today = datetime.datetime.now().strftime("%Y年%m月%d日")
@@ -1267,195 +1342,285 @@ class PipeSupportWidget(QWidget):
             # 设置日期字体为黑色
             for run in date_paragraph.runs:
                 run.font.color.rgb = RGBColor(0, 0, 0)  # 黑色
-            
+
             # 重新执行计算，确保获取最新结果
             self._on_calculate_clicked()
-            
+
             # 从存储的计算结果中获取数据
             results = self._calculation_results
-            
+
             # 创建Word文档内容
-            
+
             # 1. 添加输入参数标题
             doc.add_heading("一、输入参数", level=1)
-            
+
             # 添加输入参数表格
             param_doc_table = doc.add_table(rows=0, cols=3)
             param_doc_table.style = 'Table Grid'
-            
+
             # 设置表格列宽
             for col in param_doc_table.columns:
                 col.width = Inches(2.0)
-            
+
             # 添加输入参数行
             param_rows = [
-                [f"底板长度：{results['base_length']}m", f"底板宽度：{results['base_bottom_width']}m", f"基础短柱长度：{results['base_column_length']}m"],
-                [f"基础短柱宽度：{results['base_column_width']}m", f"基础顶面宽度：{results['base_top_width']}m", f"基础高度：{results['base_height']}m"],
-                [f"基础高出地面高度：{results['base_height_above_ground']}m", f"基底埋深：{results['depth']:.3f}m", f"垫层厚度：{float(self._cushion_thickness_edit.text()) if self._cushion_thickness_edit.text() else 0}mm"],
-                [f"换填厚度：{results['replacement_thickness']}m", f"换填宽度：{results['replacement_width']}m", f"基础数量：{results['foundation_count']}个"],
-                [f"预埋钢板：{results['plate_length']}m × {results['plate_width']}m × {results['plate_thickness']}mm", f"基础样式：{results['foundation_style']}", f"管墩形式：{results['pipe_support_type']}"],
-                [f"是否考虑地下水：{results['consider_groundwater']}", f"上部垂直荷载：{results['upper_vertical_load']}KN", f"上部水平荷载：{results['upper_horizontal_load']}KN"],
-                [f"地基承载力：{results['bearing_capacity']}kPa", "", ""]
+                [
+                    f"底板长度：{results['base_length']}m",
+                    f"底板宽度：{results['base_bottom_width']}m",
+                    f"基础短柱长度：{results['base_column_length']}m"
+                ],
+                [
+                    f"基础短柱宽度：{results['base_column_width']}m",
+                    f"基础顶面宽度：{results['base_top_width']}m",
+                    f"基础高度：{results['base_height']}m"
+                ],
+                [
+                    f"基础高出地面高度：{results['base_height_above_ground']}m",
+                    f"基底埋深：{results['depth']:.3f}m",
+                    f"垫层厚度：{float(self._cushion_thickness_edit.text()) if self._cushion_thickness_edit.text() else 0}mm"
+                ],
+                [
+                    f"换填厚度：{results['replacement_thickness']}m",
+                    f"换填宽度：{results['replacement_width']}m",
+                    f"基础数量：{results['foundation_count']}个"
+                ],
+                [
+                    f"预埋钢板：{results['plate_length']}m × {results['plate_width']}m × {results['plate_thickness']}mm",
+                    f"基础样式：{results['foundation_style']}",
+                    f"管墩形式：{results['pipe_support_type']}"
+                ],
+                [
+                    f"是否考虑地下水：{results['consider_groundwater']}",
+                    f"上部垂直荷载：{results['upper_vertical_load']}KN",
+                    f"上部水平荷载：{results['upper_horizontal_load']}KN"
+                ], [f"地基承载力：{results['bearing_capacity']}kPa", "", ""]
             ]
-            
+
             for row_data in param_rows:
                 row_cells = param_doc_table.add_row().cells
                 for i, cell_data in enumerate(row_data):
                     row_cells[i].text = cell_data
-            
+
             # 2. 添加计算过程标题
             heading = doc.add_heading("二、计算过程", level=1)
             # 设置标题为黑色
             for run in heading.runs:
                 run.font.color.rgb = RGBColor(0, 0, 0)  # 黑色
-            
+
             # 添加计算过程
-            
+
             # 辅助函数：设置段落为黑色
             def set_paragraph_black(paragraph):
                 for run in paragraph.runs:
                     run.font.color.rgb = RGBColor(0, 0, 0)  # 黑色
-            
+
             # 基础体积计算
             heading = doc.add_heading("1. 基础体积计算", level=2)
             set_paragraph_black(heading)
             if results['foundation_style'] == "T型基础":
                 p1 = doc.add_paragraph(f"（1）单个基础体积：")
                 set_paragraph_black(p1)
-                p2 = doc.add_paragraph(f"    底板体积：{results['base_length']}m × {results['base_bottom_width']}m × {results['base_plate_height']}m")
+                p2 = doc.add_paragraph(
+                    f"    底板体积：{results['base_length']}m × {results['base_bottom_width']}m × {results['base_plate_height']}m"
+                )
                 set_paragraph_black(p2)
-                p3 = doc.add_paragraph(f"    短柱体积：{results['base_column_length']}m × {results['base_column_width']}m × ({results['base_height']}m - {results['base_plate_height']}m)")
+                p3 = doc.add_paragraph(
+                    f"    短柱体积：{results['base_column_length']}m × {results['base_column_width']}m × ({results['base_height']}m - {results['base_plate_height']}m)"
+                )
                 set_paragraph_black(p3)
-                p4 = doc.add_paragraph(f"    单个基础总体积：{results['basic_volume_single']:.3f} m³")
+                p4 = doc.add_paragraph(
+                    f"    单个基础总体积：{results['basic_volume_single']:.3f} m³")
                 set_paragraph_black(p4)
             else:
-                p1 = doc.add_paragraph(f"（1）单个基础体积：({results['base_bottom_width']}m + {results['base_top_width']}m) × {results['base_height']}m / 2 × {results['base_length']}m")
+                p1 = doc.add_paragraph(
+                    f"（1）单个基础体积：({results['base_bottom_width']}m + {results['base_top_width']}m) × {results['base_height']}m / 2 × {results['base_length']}m"
+                )
                 set_paragraph_black(p1)
-                p2 = doc.add_paragraph(f"    = {results['basic_volume_single']:.3f} m³")
+                p2 = doc.add_paragraph(
+                    f"    = {results['basic_volume_single']:.3f} m³")
                 set_paragraph_black(p2)
-            p5 = doc.add_paragraph(f"（2）总基础体积：{results['basic_volume_single']:.3f}m³ × {results['foundation_count']}个")
+            p5 = doc.add_paragraph(
+                f"（2）总基础体积：{results['basic_volume_single']:.3f}m³ × {results['foundation_count']}个"
+            )
             set_paragraph_black(p5)
             p6 = doc.add_paragraph(f"    = {results['basic_volume']:.3f} m³")
             set_paragraph_black(p6)
-            
+
             # 垫层体积计算
             heading = doc.add_heading("2. 垫层体积计算", level=2)
             set_paragraph_black(heading)
-            p1 = doc.add_paragraph(f"（1）单个基础垫层体积：({results['base_length']}m + 2×0.1m) × ({results['base_bottom_width']}m + 2×0.1m) × {results['cushion_thickness']}m")
+            p1 = doc.add_paragraph(
+                f"（1）单个基础垫层体积：({results['base_length']}m + 2×0.1m) × ({results['base_bottom_width']}m + 2×0.1m) × {results['cushion_thickness']}m"
+            )
             set_paragraph_black(p1)
-            p2 = doc.add_paragraph(f"    = {results['cushion_volume_single']:.3f} m³")
+            p2 = doc.add_paragraph(
+                f"    = {results['cushion_volume_single']:.3f} m³")
             set_paragraph_black(p2)
-            p3 = doc.add_paragraph(f"（2）总垫层体积：{results['cushion_volume_single']:.3f}m³ × {results['foundation_count']}个")
+            p3 = doc.add_paragraph(
+                f"（2）总垫层体积：{results['cushion_volume_single']:.3f}m³ × {results['foundation_count']}个"
+            )
             set_paragraph_black(p3)
             p4 = doc.add_paragraph(f"    = {results['cushion_volume']:.3f} m³")
             set_paragraph_black(p4)
-            
+
             # 换填级配砂石体积计算
             heading = doc.add_heading("3. 换填级配砂石体积计算", level=2)
             set_paragraph_black(heading)
-            p1 = doc.add_paragraph(f"（1）单个基础换填级配砂石体积：({results['base_length']}m + 2 × {results['replacement_width']}m) × ({results['base_bottom_width']}m + 2 × {results['replacement_width']}m) × {results['replacement_thickness']}m")
+            p1 = doc.add_paragraph(
+                f"（1）单个基础换填级配砂石体积：({results['base_length']}m + 2 × {results['replacement_width']}m) × ({results['base_bottom_width']}m + 2 × {results['replacement_width']}m) × {results['replacement_thickness']}m"
+            )
             set_paragraph_black(p1)
-            p2 = doc.add_paragraph(f"    = {results['replacement_volume_single']:.3f} m³")
+            p2 = doc.add_paragraph(
+                f"    = {results['replacement_volume_single']:.3f} m³")
             set_paragraph_black(p2)
-            p3 = doc.add_paragraph(f"（2）总换填级配砂石体积：{results['replacement_volume_single']:.3f}m³ × {results['foundation_count']}个")
+            p3 = doc.add_paragraph(
+                f"（2）总换填级配砂石体积：{results['replacement_volume_single']:.3f}m³ × {results['foundation_count']}个"
+            )
             set_paragraph_black(p3)
-            p4 = doc.add_paragraph(f"    = {results['replacement_volume']:.3f} m³")
+            p4 = doc.add_paragraph(
+                f"    = {results['replacement_volume']:.3f} m³")
             set_paragraph_black(p4)
-            
+
             # 钢材重量计算
             heading = doc.add_heading("4. 钢材重量计算", level=2)
             set_paragraph_black(heading)
-            p1 = doc.add_paragraph(f"（1）单个基础钢材重量：{results['steel_weight_single']:.3f} t")
+            p1 = doc.add_paragraph(
+                f"（1）单个基础钢材重量：{results['steel_weight_single']:.3f} t")
             set_paragraph_black(p1)
-            p2 = doc.add_paragraph(f"（2）总钢材重量：{results['steel_weight_single']:.3f}t × {results['foundation_count']}个")
+            p2 = doc.add_paragraph(
+                f"（2）总钢材重量：{results['steel_weight_single']:.3f}t × {results['foundation_count']}个"
+            )
             set_paragraph_black(p2)
             p3 = doc.add_paragraph(f"    = {results['steel_weight']:.3f} t")
             set_paragraph_black(p3)
-            
+
             # 基础防腐面积计算
             heading = doc.add_heading("5. 基础防腐面积计算", level=2)
             set_paragraph_black(heading)
             if results['foundation_style'] == "T型基础":
                 p1 = doc.add_paragraph(f"（1）单个基础防腐面积：")
                 set_paragraph_black(p1)
-                p2 = doc.add_paragraph(f"    底板侧面积 = ({results['base_length']}m + {results['base_bottom_width']}m) × 2 × {results['base_plate_height']}m")
+                p2 = doc.add_paragraph(
+                    f"    底板侧面积 = ({results['base_length']}m + {results['base_bottom_width']}m) × 2 × {results['base_plate_height']}m"
+                )
                 set_paragraph_black(p2)
-                p3 = doc.add_paragraph(f"    短柱侧面积 = ({results['base_column_length']}m + {results['base_column_width']}m) × 2 × ({results['depth']}m - {results['base_plate_height']}m)")
+                p3 = doc.add_paragraph(
+                    f"    短柱侧面积 = ({results['base_column_length']}m + {results['base_column_width']}m) × 2 × ({results['depth']}m - {results['base_plate_height']}m)"
+                )
                 set_paragraph_black(p3)
-                p4 = doc.add_paragraph(f"    单个基础防腐面积 = {results['anticorrosion_area_single']:.3f} m²")
+                p4 = doc.add_paragraph(
+                    f"    单个基础防腐面积 = {results['anticorrosion_area_single']:.3f} m²"
+                )
                 set_paragraph_black(p4)
             else:
                 import math
-                slant_height = math.sqrt(results['depth'] ** 2 + ((results['base_bottom_width'] - results['base_top_width']) / 2) ** 2)
+                slant_height = math.sqrt(results['depth']**2 +
+                                         ((results['base_bottom_width'] -
+                                           results['base_top_width']) / 2)**2)
                 p1 = doc.add_paragraph(f"（1）单个基础防腐面积：")
                 set_paragraph_black(p1)
-                p2 = doc.add_paragraph(f"    2个梯形侧面面积 = 2 × ({results['base_top_width']}m + {results['base_bottom_width']}m) × {results['depth']}m / 2")
+                p2 = doc.add_paragraph(
+                    f"    2个梯形侧面面积 = 2 × ({results['base_top_width']}m + {results['base_bottom_width']}m) × {results['depth']}m / 2"
+                )
                 set_paragraph_black(p2)
-                p3 = doc.add_paragraph(f"    2个矩形侧面面积 = 2 × √({results['depth']}m² + (({results['base_bottom_width']}m - {results['base_top_width']}m)/2)²) × {results['base_length']}m")
+                p3 = doc.add_paragraph(
+                    f"    2个矩形侧面面积 = 2 × √({results['depth']}m² + (({results['base_bottom_width']}m - {results['base_top_width']}m)/2)²) × {results['base_length']}m"
+                )
                 set_paragraph_black(p3)
-                p4 = doc.add_paragraph(f"    斜边长 = √({results['depth']:.3f}² + {((results['base_bottom_width'] - results['base_top_width'])/2):.3f}²) = {slant_height:.3f}m")
+                p4 = doc.add_paragraph(
+                    f"    斜边长 = √({results['depth']:.3f}² + {((results['base_bottom_width'] - results['base_top_width'])/2):.3f}²) = {slant_height:.3f}m"
+                )
                 set_paragraph_black(p4)
-                p5 = doc.add_paragraph(f"    单个基础防腐面积 = {results['anticorrosion_area_single']:.3f} m²")
+                p5 = doc.add_paragraph(
+                    f"    单个基础防腐面积 = {results['anticorrosion_area_single']:.3f} m²"
+                )
                 set_paragraph_black(p5)
-            p6 = doc.add_paragraph(f"（2）总基础防腐面积：{results['anticorrosion_area_single']:.3f}m² × {results['foundation_count']}个")
+            p6 = doc.add_paragraph(
+                f"（2）总基础防腐面积：{results['anticorrosion_area_single']:.3f}m² × {results['foundation_count']}个"
+            )
             set_paragraph_black(p6)
-            p7 = doc.add_paragraph(f"    = {results['anticorrosion_area']:.3f} m²")
+            p7 = doc.add_paragraph(
+                f"    = {results['anticorrosion_area']:.3f} m²")
             set_paragraph_black(p7)
-            
+
             # 地基承载力验算
             heading = doc.add_heading("6. 地基承载力验算", level=2)
             set_paragraph_black(heading)
-            p1 = doc.add_paragraph(f"（1）基础体积：{results['basic_volume_single']:.3f} m³")
+            p1 = doc.add_paragraph(
+                f"（1）基础体积：{results['basic_volume_single']:.3f} m³")
             set_paragraph_black(p1)
-            p2 = doc.add_paragraph(f"（2）基础自重：{results['basic_volume_single']:.3f}m³ × {results['concrete_density']}KN/m³ = {results['basic_weight']:.3f} KN")
+            p2 = doc.add_paragraph(
+                f"（2）基础自重：{results['basic_volume_single']:.3f}m³ × {results['concrete_density']}KN/m³ = {results['basic_weight']:.3f} KN"
+            )
             set_paragraph_black(p2)
-            if results['foundation_style'] == "T型基础" and results['soil_load'] > 0:
-                p3 = doc.add_paragraph(f"（3）覆土荷载：{results['soil_load']:.3f} KN")
+            if results['foundation_style'] == "T型基础" and results[
+                    'soil_load'] > 0:
+                p3 = doc.add_paragraph(
+                    f"（3）覆土荷载：{results['soil_load']:.3f} KN")
                 set_paragraph_black(p3)
-                p4 = doc.add_paragraph(f"（4）总荷载：上部荷载 {results['upper_vertical_load']}KN + 基础自重 {results['basic_weight']:.3f}KN + 覆土荷载 {results['soil_load']:.3f}KN = {results['total_load']:.3f} KN")
+                p4 = doc.add_paragraph(
+                    f"（4）总荷载：上部荷载 {results['upper_vertical_load']}KN + 基础自重 {results['basic_weight']:.3f}KN + 覆土荷载 {results['soil_load']:.3f}KN = {results['total_load']:.3f} KN"
+                )
                 set_paragraph_black(p4)
             else:
-                p3 = doc.add_paragraph(f"（3）总荷载：上部荷载 {results['upper_vertical_load']}KN + 基础自重 {results['basic_weight']:.3f}KN = {results['total_load']:.3f} KN")
+                p3 = doc.add_paragraph(
+                    f"（3）总荷载：上部荷载 {results['upper_vertical_load']}KN + 基础自重 {results['basic_weight']:.3f}KN = {results['total_load']:.3f} KN"
+                )
                 set_paragraph_black(p3)
-            p5 = doc.add_paragraph(f"（4）基底面积：{results['base_length']}m × {results['base_bottom_width']}m = {results['base_length'] * results['base_bottom_width']:.3f} m²")
+            p5 = doc.add_paragraph(
+                f"（4）基底面积：{results['base_length']}m × {results['base_bottom_width']}m = {results['base_length'] * results['base_bottom_width']:.3f} m²"
+            )
             set_paragraph_black(p5)
-            p6 = doc.add_paragraph(f"（5）基底压力：{results['total_load']:.3f}KN ÷ {results['base_length'] * results['base_bottom_width']:.3f}m² = {results['base_pressure']:.3f} kPa")
+            p6 = doc.add_paragraph(
+                f"（5）基底压力：{results['total_load']:.3f}KN ÷ {results['base_length'] * results['base_bottom_width']:.3f}m² = {results['base_pressure']:.3f} kPa"
+            )
             set_paragraph_black(p6)
-            p7 = doc.add_paragraph(f"（6）地基承载力：{results['bearing_capacity']} kPa")
+            p7 = doc.add_paragraph(
+                f"（6）地基承载力：{results['bearing_capacity']} kPa")
             set_paragraph_black(p7)
-            p8 = doc.add_paragraph(f"（7）地基承载力修正值：{results['bearing_capacity_corrected']:.3f} kPa")
+            p8 = doc.add_paragraph(
+                f"（7）地基承载力修正值：{results['bearing_capacity_corrected']:.3f} kPa")
             set_paragraph_black(p8)
-            p9 = doc.add_paragraph(f"（8）1.2倍地基承载力修正值：{results['bearing_capacity_corrected_12']:.3f} kPa")
+            p9 = doc.add_paragraph(
+                f"（8）1.2倍地基承载力修正值：{results['bearing_capacity_corrected_12']:.3f} kPa"
+            )
             set_paragraph_black(p9)
-            if results['foundation_style'] == "T型基础" and results['upper_horizontal_load'] != 0:
+            if results['foundation_style'] == "T型基础" and results[
+                    'upper_horizontal_load'] != 0:
                 p10 = doc.add_paragraph(f"（9）Pkmax：{results['pkmax']:.3f} kPa")
                 set_paragraph_black(p10)
-                p11 = doc.add_paragraph(f"（10）Pkmin：{results['pkmin']:.3f} kPa")
+                p11 = doc.add_paragraph(
+                    f"（10）Pkmin：{results['pkmin']:.3f} kPa")
                 set_paragraph_black(p11)
-            p12 = doc.add_paragraph(f"（11）验算结果：{results['bearing_check_result']}")
+            p12 = doc.add_paragraph(
+                f"（11）验算结果：{results['bearing_check_result']}")
             set_paragraph_black(p12)
-            
+
             # 抗倾覆验算（仅梯形基础）
-            if results['foundation_style'] != "T型基础" and results['overturning_check_result']:
+            if results['foundation_style'] != "T型基础" and results[
+                    'overturning_check_result']:
                 heading = doc.add_heading("7. 抗倾覆验算", level=2)
                 set_paragraph_black(heading)
-                p1 = doc.add_paragraph(f"（1）抗倾覆安全系数：{results['safety_factor']:.3f}")
+                p1 = doc.add_paragraph(
+                    f"（1）抗倾覆安全系数：{results['safety_factor']:.3f}")
                 set_paragraph_black(p1)
-                p2 = doc.add_paragraph(f"（2）验算结果：{'✅ 满足要求' if results['is_overturning_satisfied'] else '❌ 不满足要求（安全系数小于1.6）'}")
+                p2 = doc.add_paragraph(
+                    f"（2）验算结果：{'✅ 满足要求' if results['is_overturning_satisfied'] else '❌ 不满足要求（安全系数小于1.6）'}"
+                )
                 set_paragraph_black(p2)
-            
+
             # 3. 添加最终计算结果
             heading = doc.add_heading("三、最终计算结果", level=1)
             set_paragraph_black(heading)
-            
+
             # 添加最终结果表格
             result_doc_table = doc.add_table(rows=0, cols=2)
             result_doc_table.style = 'Table Grid'
-            
+
             # 设置表格列宽
             for col in result_doc_table.columns:
                 col.width = Inches(3.0)
-            
+
             # 添加最终结果行
             result_rows = [
                 ["基础体积", f"{results['basic_volume']:.3f} m³"],
@@ -1465,18 +1630,22 @@ class PipeSupportWidget(QWidget):
                 ["基础防腐面积", f"{results['anticorrosion_area']:.3f} m²"],
                 ["地基承载力验算", results['bearing_check_result']]
             ]
-            
-            if results['foundation_style'] != "T型基础" and results['overturning_check_result']:
-                result_rows.append(["抗倾覆验算", "✅ 满足要求" if results['is_overturning_satisfied'] else "❌ 不满足要求（安全系数小于1.6）"])
-            
+
+            if results['foundation_style'] != "T型基础" and results[
+                    'overturning_check_result']:
+                result_rows.append([
+                    "抗倾覆验算", "✅ 满足要求" if results['is_overturning_satisfied']
+                    else "❌ 不满足要求（安全系数小于1.6）"
+                ])
+
             for row_data in result_rows:
                 row_cells = result_doc_table.add_row().cells
                 for i, cell_data in enumerate(row_data):
                     row_cells[i].text = cell_data
-            
+
             # 保存文档
             doc.save(file_path)
-            
+
             # 提示保存成功，并添加打开文件按钮
             from PySide6.QtWidgets import QMessageBox
             msg_box = QMessageBox()
@@ -1486,18 +1655,18 @@ class PipeSupportWidget(QWidget):
             msg_box.addButton("确定", QMessageBox.AcceptRole)
             open_button = msg_box.addButton("打开文件", QMessageBox.ActionRole)
             msg_box.exec_()
-            
+
             # 处理用户选择
             if msg_box.clickedButton() == open_button:
                 # 打开文件
                 import os
                 os.startfile(file_path)
-                
+
         except Exception as e:
             # 处理保存错误
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.critical(self, "错误", f"导出计算书时发生错误：\n{str(e)}")
-    
+
     @Slot()
     def _on_export_material_triggered(self):
         """导出料表按钮点击事件
@@ -1509,42 +1678,32 @@ class PipeSupportWidget(QWidget):
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "警告", "请先进行计算，获取计算结果后再导出料表！")
             return
-        
+
         # 打开文件保存对话框
         from PySide6.QtWidgets import QFileDialog
         file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "导出料表",
-            "管墩计算料表.xlsx",
-            "Excel 文档 (*.xlsx);;所有文件 (*)"
-        )
-        
+            self, "导出料表", "管墩计算料表.xlsx", "Excel 文档 (*.xlsx);;所有文件 (*)")
+
         if not file_path:
             return
-        
+
         # 确保文件后缀为.xlsx
         if not file_path.endswith('.xlsx'):
             file_path += '.xlsx'
-        
+
         # 使用pandas创建Excel文档
         try:
             import pandas as pd
-            
+
             # 重新执行计算，确保获取最新结果
             self._on_calculate_clicked()
-            
+
             # 从存储的计算结果中获取数据
             results = self._calculation_results
-            
+
             # 创建Excel数据
             data = {
-                '项目': [
-                    '基础体积',
-                    '垫层体积',
-                    '换填级配砂石体积',
-                    '钢材重量',
-                    '基础防腐面积'
-                ],
+                '项目': ['基础体积', '垫层体积', '换填级配砂石体积', '钢材重量', '基础防腐面积'],
                 '单个基础': [
                     f'{results["basic_volume_single"]:.3f}',
                     f'{results["cushion_volume_single"]:.3f}',
@@ -1553,10 +1712,8 @@ class PipeSupportWidget(QWidget):
                     f'{results["anticorrosion_area_single"]:.3f}'
                 ],
                 '基础个数': [
-                    results["foundation_count"],
-                    results["foundation_count"],
-                    results["foundation_count"],
-                    results["foundation_count"],
+                    results["foundation_count"], results["foundation_count"],
+                    results["foundation_count"], results["foundation_count"],
                     results["foundation_count"]
                 ],
                 '总计': [
@@ -1566,26 +1723,20 @@ class PipeSupportWidget(QWidget):
                     f'{results["steel_weight"]:.3f}',
                     f'{results["anticorrosion_area"]:.3f}'
                 ],
-                '总计单位': [
-                    'm³',
-                    'm³',
-                    'm³',
-                    't',
-                    'm²'
-                ]
+                '总计单位': ['m³', 'm³', 'm³', 't', 'm²']
             }
-            
+
             # 创建DataFrame
             df = pd.DataFrame(data)
-            
+
             # 创建Excel writer
             with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
                 # 写入数据到Sheet1
                 df.to_excel(writer, sheet_name='料表', index=False)
-                
+
                 # 获取工作表
                 worksheet = writer.sheets['料表']
-                
+
                 # 调整列宽
                 for column in worksheet.columns:
                     max_length = 0
@@ -1597,8 +1748,9 @@ class PipeSupportWidget(QWidget):
                         except:
                             pass
                     adjusted_width = min(max_length + 2, 30)
-                    worksheet.column_dimensions[column_letter].width = adjusted_width
-            
+                    worksheet.column_dimensions[
+                        column_letter].width = adjusted_width
+
             # 提示保存成功，并添加打开文件按钮
             from PySide6.QtWidgets import QMessageBox
             msg_box = QMessageBox()
@@ -1608,18 +1760,18 @@ class PipeSupportWidget(QWidget):
             msg_box.addButton("确定", QMessageBox.AcceptRole)
             open_button = msg_box.addButton("打开文件", QMessageBox.ActionRole)
             msg_box.exec_()
-            
+
             # 处理用户选择
             if msg_box.clickedButton() == open_button:
                 # 打开文件
                 import os
                 os.startfile(file_path)
-                
+
         except Exception as e:
             # 处理保存错误
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.critical(self, "错误", f"导出料表时发生错误：\n{str(e)}")
-    
+
     def reset(self):
         """重置插件UI到初始状态"""
         # 清空所有输入框
@@ -1641,13 +1793,20 @@ class PipeSupportWidget(QWidget):
         self._upper_vertical_load_edit.clear()
         self._upper_horizontal_load_edit.clear()
         self._bearing_capacity_edit.clear()
+        self._consider_groundwater_combo.setCurrentText("否")
+
+        # 清空输入框错误样式
+        for edit in self.findChildren(QLineEdit):
+            edit.setStyleSheet("")
+
         # 清空结果文本框
         self._result_text.clear()
+        self._calculation_results = {}
         # 重置基础样式为T型基础
         self._foundation_style_combo.setCurrentText("T型基础")
         # 重置管墩形式为固定墩
         self._pipe_support_type_combo.setCurrentText("固定墩")
-    
+
     def save(self, file_path):
         """保存参数到文件
         
@@ -1655,7 +1814,7 @@ class PipeSupportWidget(QWidget):
             file_path: 文件路径
         """
         import json
-        
+
         # 收集所有输入参数
         params = {
             "base_length": self._base_length_edit.text(),
@@ -1679,11 +1838,11 @@ class PipeSupportWidget(QWidget):
             "foundation_style": self._foundation_style_combo.currentText(),
             "pipe_support_type": self._pipe_support_type_combo.currentText()
         }
-        
+
         # 保存到文件
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(params, f, ensure_ascii=False, indent=2)
-    
+
     def open(self, file_path):
         """从文件加载参数
         
@@ -1691,12 +1850,12 @@ class PipeSupportWidget(QWidget):
             file_path: 文件路径
         """
         import json
-        
+
         try:
             # 从文件加载参数
             with open(file_path, 'r', encoding='utf-8') as f:
                 params = json.load(f)
-            
+
             # 设置输入参数
             self._base_length_edit.setText(params.get("base_length", ""))
             self._base_bottom_width_edit.setText(params.get("base_bottom_width", ""))
@@ -1716,18 +1875,18 @@ class PipeSupportWidget(QWidget):
             self._upper_vertical_load_edit.setText(params.get("upper_vertical_load", ""))
             self._upper_horizontal_load_edit.setText(params.get("upper_horizontal_load", ""))
             self._bearing_capacity_edit.setText(params.get("bearing_capacity", ""))
-            
+
             # 设置基础样式
             foundation_style = params.get("foundation_style", "T型基础")
             self._foundation_style_combo.setCurrentText(foundation_style)
-            
+
             # 设置管墩形式
             pipe_support_type = params.get("pipe_support_type", "固定墩")
             self._pipe_support_type_combo.setCurrentText(pipe_support_type)
-            
+
             # 清空结果文本框
             self._result_text.clear()
-            
+
         except Exception as e:
             # 处理加载错误
             error_html = f"""<html>

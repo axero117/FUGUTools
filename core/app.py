@@ -17,7 +17,7 @@ class FugoApp:
         """初始化应用程序"""
         self._app = QApplication(sys.argv)
         self._app.setApplicationName("FugoToolbox")
-        self._app.setApplicationVersion("1.0.0")
+        self._app.setApplicationVersion("1.0.1")
         
         # 初始化核心组件
         self._config = Config()

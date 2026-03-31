@@ -82,28 +82,28 @@ QWidget#centralwidget {
 /* 左侧工具导航（侧边栏） - 支持QListWidget和QTreeWidget */
 QListWidget#toolNavigation,
 QTreeWidget#toolNavigation {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f5f5f5, stop:1 #e0e0e0);
-    color: #333;
-    border: 1px solid #ccc;
+    background: #EEF1F5;
+    color: #2F3542;
+    border: 1px solid #D9DDE3;
+    border-radius: 6px;
+    padding: 10px 8px;
     font-size: 14px;
 }
 
 QListWidget#toolNavigation::item,
 QTreeWidget#toolNavigation::item {
-    padding: 12px 16px;
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f5f5f5, stop:1 #e0e0e0);
-    border: 1px solid #ccc;
-    margin: 2px;
-    border-radius: 4px;
-    color: #333;
+    padding: 0;
+    margin: 3px 0;
+    border: none;
+    background: transparent;
+    color: transparent;
 }
 
 QListWidget#toolNavigation::item:selected,
 QTreeWidget#toolNavigation::item:selected {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3498DB, stop:1 #2980B9);
-    border: 1px solid #2471A3;
-    color: white;
-
+    background: transparent;
+    border: none;
+    color: transparent;
 }
 
 /* 移除左侧工具栏选中时的白色虚线框（焦点指示器） */
@@ -124,9 +124,20 @@ QTreeWidget#toolNavigation::item:selected:focus {
 
 QListWidget#toolNavigation::item:hover,
 QTreeWidget#toolNavigation::item:hover {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3aade0, stop:1 #3498DB);
-    border: 1px solid #2980B9;
-    color: white;
+    background: transparent;
+    border: none;
+    color: transparent;
+}
+
+QTreeWidget#toolNavigation::branch {
+    background: transparent;
+}
+
+QTreeWidget#toolNavigation::branch:has-siblings,
+QTreeWidget#toolNavigation::branch:!has-children,
+QTreeWidget#toolNavigation::branch:has-children {
+    border-image: none;
+    image: none;
 }
 
 /* 右侧工作区 */
@@ -186,6 +197,87 @@ QGroupBox::title {
     color: #333;
     font-weight: bold;
     font-size: 14px;
+}
+
+/* 计算模块统一风格（与主页树状菜单一致） */
+QLabel#moduleTitle {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1F2D3D;
+    margin-bottom: 10px;
+}
+
+QGroupBox[moduleCard="true"] {
+    background: #F5F6F8;
+    border: 1px solid #D9DDE3;
+    border-radius: 6px;
+    margin-top: 14px;
+    padding: 14px;
+}
+
+QGroupBox[moduleCard="true"]::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 8px;
+    color: #1F2D3D;
+    font-size: 13px;
+    font-weight: bold;
+    background: #F5F6F8;
+}
+
+QPushButton[moduleAction="primary"] {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3498DB, stop:1 #2980B9);
+    color: white;
+    border: 1px solid #2471A3;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-size: 14px;
+    min-width: 96px;
+}
+
+QPushButton[moduleAction="primary"]:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3aade0, stop:1 #3498DB);
+}
+
+QPushButton[moduleAction="primary"]:pressed {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2471A3, stop:1 #1f638c);
+}
+
+QPushButton[moduleAction="secondary"] {
+    background: #EAF4FF;
+    color: #1F4E79;
+    border: 1px solid #BDD9F6;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-size: 14px;
+    min-width: 110px;
+}
+
+QPushButton[moduleAction="secondary"]:hover {
+    background: #DDEEFF;
+    border-color: #9FC8EF;
+}
+
+QPushButton[moduleAction="secondary"]:pressed {
+    background: #D2E7FB;
+}
+
+QPushButton[moduleAction="ghost"] {
+    background: #F3F4F6;
+    color: #2F3542;
+    border: 1px solid #D0D7DE;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-size: 14px;
+    min-width: 90px;
+}
+
+QPushButton[moduleAction="ghost"]:hover {
+    background: #E9ECEF;
+}
+
+QPushButton[moduleAction="ghost"]:pressed {
+    background: #DDE2E7;
 }
 
 /* QPushButton 样式 - 拟物按钮 */
