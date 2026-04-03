@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('resources', 'resources'), ('plugins', 'plugins')],
+    datas=[('resources', 'resources'), ('plugins', 'plugins'), ('ReleaseNotes.md', '.')],
     hiddenimports=['PySide6.QtPrintSupport', 'PySide6.QtSvg', 'PySide6.QtXml', 'openpyxl', 'xlrd', 'pandas', 'sqlite3', 'tkinter', 'tkinter.ttk', 'plotly', 'plotly.graph_objects', 'plotly.express', 'docx', 'pandas._libs.tslibs.timedeltas', 'pandas._libs.tslibs.nattype', 'pandas._libs.tslibs.np_datetime', 'pandas._libs.tslibs.parsing', 'pandas._libs.tslibs.offsets'],
     hookspath=[],
     hooksconfig={},

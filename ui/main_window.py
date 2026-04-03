@@ -320,9 +320,6 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
-        # 设置菜单
-        settings_menu = menu_bar.addMenu("设置")
-
         # 帮助菜单
         help_menu = menu_bar.addMenu("帮助")
 

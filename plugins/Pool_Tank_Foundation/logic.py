@@ -60,6 +60,8 @@ class PoolFoundationInput:
     water_depth_inner: float = 0.0  # 池内实际水深 (m)
     gamma_soil_natural: float = 18.0  # 外挑填土天然重度 (kN/m³)
     gamma_soil_sat: float = 18.0  # 外挑填土饱和重度 (kN/m³)
+    roof_live_load: float = 0.0  # 顶板活荷载 (kN/m²)
+    ground_live_load: float = 0.0  # 地面活荷载 (kN/m²)
 
 
 class PoolTankFoundationLogic:
@@ -208,7 +210,6 @@ class PoolTankFoundationLogic:
         # 按用户最新要求：换填重量不参与抗浮总重量计算，仅作为材料统计量输出。
         G_self = V_concrete_total * p.gamma_concrete
         G_bal = V_bal * p.gamma_bal
-        G_cushion = V_cushion * p.gamma_cushion
 
         # 填土有效重度 = 饱和重度 - 水重度
         gamma_soil_eff = p.gamma_soil_sat - p.gamma_water
@@ -260,7 +261,14 @@ class PoolTankFoundationLogic:
             H_bal_above_wt = 0.0
             G_soil_bal = 0.0
 
-        G_total = G_self + G_bal + G_soil_overhang + G_soil_bal
+        # ---- 3) 顶板活荷载重量（顶板面积 × 顶板活荷载）----
+        G_roof_live = L_roof * W_roof * p.roof_live_load
+
+        # ---- 4) 地面活荷载重量（底板外挑面积 + 平衡层外挑面积）× 地面活荷载 ----
+        A_ground_live = A_overhang_soil + (A_bal_soil if p.has_balancing_layer else 0.0)
+        G_ground_live = A_ground_live * p.ground_live_load
+
+        G_total = G_self + G_bal + G_soil_overhang + G_soil_bal + G_roof_live + G_ground_live
 
         # D) 池内水重量
         V_water_max = p.L * p.W * H_in
@@ -356,7 +364,6 @@ class PoolTankFoundationLogic:
                 "F_buoy": F_buoy,
                 "G_self": G_self,
                 "G_bal": G_bal,
-                "G_cushion": G_cushion,
                 "gamma_soil_eff": gamma_soil_eff,
                 "G_soil_overhang": G_soil_overhang,
                 "A_overhang_soil": A_overhang_soil,
@@ -366,6 +373,9 @@ class PoolTankFoundationLogic:
                 "A_bal_soil": A_bal_soil,
                 "H_bal_above_wt": H_bal_above_wt,
                 "H_bal_below_wt": H_bal_below_wt,
+                "G_roof_live": G_roof_live,
+                "G_ground_live": G_ground_live,
+                "A_ground_live": A_ground_live,
                 "G_total": G_total,
                 "G_water_full": G_water_full,
                 "G_water_actual": G_water_actual,
