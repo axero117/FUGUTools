@@ -60,8 +60,6 @@ class PoolFoundationInput:
     water_depth_inner: float = 0.0  # 池内实际水深 (m)
     gamma_soil_natural: float = 18.0  # 外挑填土天然重度 (kN/m³)
     gamma_soil_sat: float = 18.0  # 外挑填土饱和重度 (kN/m³)
-    roof_live_load: float = 0.0  # 顶板活荷载 (kN/m²)
-    ground_live_load: float = 0.0  # 地面活荷载 (kN/m²)
 
 
 class PoolTankFoundationLogic:
@@ -261,14 +259,7 @@ class PoolTankFoundationLogic:
             H_bal_above_wt = 0.0
             G_soil_bal = 0.0
 
-        # ---- 3) 顶板活荷载重量（顶板面积 × 顶板活荷载）----
-        G_roof_live = L_roof * W_roof * p.roof_live_load
-
-        # ---- 4) 地面活荷载重量（底板外挑面积 + 平衡层外挑面积）× 地面活荷载 ----
-        A_ground_live = A_overhang_soil + (A_bal_soil if p.has_balancing_layer else 0.0)
-        G_ground_live = A_ground_live * p.ground_live_load
-
-        G_total = G_self + G_bal + G_soil_overhang + G_soil_bal + G_roof_live + G_ground_live
+        G_total = G_self + G_bal + G_soil_overhang + G_soil_bal
 
         # D) 池内水重量
         V_water_max = p.L * p.W * H_in
@@ -373,9 +364,6 @@ class PoolTankFoundationLogic:
                 "A_bal_soil": A_bal_soil,
                 "H_bal_above_wt": H_bal_above_wt,
                 "H_bal_below_wt": H_bal_below_wt,
-                "G_roof_live": G_roof_live,
-                "G_ground_live": G_ground_live,
-                "A_ground_live": A_ground_live,
                 "G_total": G_total,
                 "G_water_full": G_water_full,
                 "G_water_actual": G_water_actual,

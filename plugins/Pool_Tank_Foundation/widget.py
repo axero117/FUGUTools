@@ -218,8 +218,6 @@ class PoolTankFoundationWidget(QWidget):
         self._add_line(grid, 3, "池内实际水深", "water_depth_inner", "m", "0")
         self._add_line(grid, 4, "填土天然重度", "gamma_soil_natural", "kN/m³", "18")
         self._add_line(grid, 5, "填土饱和重度", "gamma_soil_sat", "kN/m³", "18")
-        self._add_line(grid, 6, "顶板活荷载", "roof_live_load", "kN/m²", "0")
-        self._add_line(grid, 7, "地面活荷载", "ground_live_load", "kN/m²", "0")
         return group
 
     def _add_line(
@@ -339,8 +337,6 @@ class PoolTankFoundationWidget(QWidget):
             water_depth_inner=self._to_float("water_depth_inner", 0.0),
             gamma_soil_natural=self._to_float("gamma_soil_natural", 18.0),
             gamma_soil_sat=self._to_float("gamma_soil_sat", 18.0),
-            roof_live_load=self._to_float("roof_live_load", 0.0),
-            ground_live_load=self._to_float("ground_live_load", 0.0),
         )
 
     @Slot()
@@ -389,8 +385,6 @@ class PoolTankFoundationWidget(QWidget):
         gamma_concrete = self._to_float("gamma_concrete", 25.0)
         gamma_soil_natural = self._to_float("gamma_soil_natural", 18.0)
         gamma_soil_sat = self._to_float("gamma_soil_sat", 18.0)
-        roof_live_load = self._to_float("roof_live_load", 0.0)
-        ground_live_load = self._to_float("ground_live_load", 0.0)
         water_table_depth = self._to_float("water_table_elev", 0.0)
         column_count = int(self._column_count.text().strip() or 0)
         has_bal = self._has_balancing_layer.currentText() == "有"
@@ -500,7 +494,6 @@ class PoolTankFoundationWidget(QWidget):
                     <tr><td>柱个数</td><td>{column_count} 个</td><td>地下水位深度（地面以下）</td><td>{f3(water_table_depth)} m</td></tr>
                     <tr><td>池内实际水深</td><td>{f3(water_depth_inner)} m</td><td>水重度</td><td>{f3(gamma_water)} kN/m³</td></tr>
                     <tr><td>混凝土重度</td><td>{f3(gamma_concrete)} kN/m³</td><td>底板底标高（自动计算）</td><td>{f3(bottom_elev_auto)} m</td></tr>
-                    <tr><td>顶板活荷载</td><td>{f3(roof_live_load)} kN/m²</td><td>地面活荷载</td><td>{f3(ground_live_load)} kN/m²</td></tr>
                 </table>
             </div>
 
@@ -570,11 +563,7 @@ class PoolTankFoundationWidget(QWidget):
                     <div class='formula-result'>平衡层区填土重量 = {f3(w['A_bal_soil'])} × ({f3(w['H_bal_above_wt'])}×{f3(gamma_soil_natural)} + {f3(w['H_bal_below_wt'])}×{f3(w['gamma_soil_eff'])}) = {f3(w['G_soil_bal'])} kN</div>
                 </div>
 
-                <div class='formula'>顶板活荷载重量 = 顶板面积 × 顶板活荷载 = {f3(g['L_roof'])} × {f3(g['W_roof'])} × {f3(roof_live_load)} = {f3(w['G_roof_live'])} kN</div>
-                <div class='formula'>地面活荷载作用面积 = 底板外挑面积 + {'平衡层外挑面积' if has_bal else '0'} = {f3(w['A_overhang_soil'])} + {f3(w['A_bal_soil'])} = {f3(w['A_ground_live'])} m²</div>
-                <div class='formula'>地面活荷载重量 = 地面活荷载作用面积 × 地面活荷载 = {f3(w['A_ground_live'])} × {f3(ground_live_load)} = {f3(w['G_ground_live'])} kN</div>
-
-                <div class='summary-row'>抗浮总重量 = 结构自重 + 平衡层重量 + 外挑区填土 + 平衡层区填土 + 顶板活荷载重量 + 地面活荷载重量<br>&nbsp;&nbsp;= {f3(w['G_self'])} + {f3(w['G_bal'])} + {f3(w['G_soil_overhang'])} + {f3(w['G_soil_bal'])} + {f3(w['G_roof_live'])} + {f3(w['G_ground_live'])} = <b>{f3(w['G_total'])} kN</b></div>
+                <div class='summary-row'>抗浮总重量 = 结构自重 + 平衡层重量 + 外挑区填土 + 平衡层区填土<br>&nbsp;&nbsp;= {f3(w['G_self'])} + {f3(w['G_bal'])} + {f3(w['G_soil_overhang'])} + {f3(w['G_soil_bal'])} = <b>{f3(w['G_total'])} kN</b></div>
 
                 <div class='formula'>满水重量 = {f3(L)} × {f3(W)} × {f3(g['H_in'])} × {f3(gamma_water)} = {f3(w['G_water_full'])} kN</div>
                 <div class='formula'>实际水深重量 = {f3(L)} × {f3(W)} × min({f3(water_depth_inner)}, {f3(g['H_in'])}) × {f3(gamma_water)} = {f3(w['G_water_actual'])} kN</div>
@@ -606,8 +595,6 @@ class PoolTankFoundationWidget(QWidget):
                 edit.setText("25")
             elif key in ("gamma_soil_natural", "gamma_soil_sat"):
                 edit.setText("18")
-            elif key in ("roof_live_load", "ground_live_load"):
-                edit.setText("0")
             elif key in ("V_partition_total", "column_a", "column_b", "column_height_custom", "water_depth_inner", "water_table_elev"):
                 edit.setText("0")
             else:
@@ -717,8 +704,6 @@ class PoolTankFoundationWidget(QWidget):
                 "water_depth_inner": ("池内实际水深", "m"),
                 "gamma_soil_natural": ("填土天然重度", "kN/m³"),
                 "gamma_soil_sat": ("填土饱和重度", "kN/m³"),
-                "roof_live_load": ("顶板活荷载", "kN/m²"),
-                "ground_live_load": ("地面活荷载", "kN/m²"),
             }
 
             payload = self._last_payload
@@ -753,8 +738,6 @@ class PoolTankFoundationWidget(QWidget):
             water_depth_inner = payload.water_depth_inner
             gamma_soil_natural = payload.gamma_soil_natural
             gamma_soil_sat = payload.gamma_soil_sat
-            roof_live_load = payload.roof_live_load
-            ground_live_load = payload.ground_live_load
             water_table_elev = payload.water_table_elev
             bottom_elev = payload.bottom_elev
             water_table_depth = abs(water_table_elev)
@@ -871,10 +854,7 @@ class PoolTankFoundationWidget(QWidget):
             add_text_paragraph(f"(15) 平衡层超出底板环形区面积 A_bal_soil = {f3(weights.get('A_bal_soil', 0.0))} m²")
             add_text_paragraph(f"(16) 平衡层区水位以上填土高度 = {f3(weights.get('H_bal_above_wt', 0.0))} m，水位以下填土高度 = {f3(weights.get('H_bal_below_wt', 0.0))} m")
             add_text_paragraph(f"(17) 平衡层区填土重量 G_soil_bal = {f3(weights.get('G_soil_bal', 0.0))} kN")
-            add_text_paragraph(f"(18) 顶板活荷载重量 G_roof_live = L_roof × W_roof × roof_live_load = {f3(geometry.get('L_roof', 0.0))} × {f3(geometry.get('W_roof', 0.0))} × {f3(roof_live_load)} = {f3(weights.get('G_roof_live', 0.0))} kN")
-            add_text_paragraph(f"(19) 地面活荷载作用面积 A_ground_live = A_overhang_soil + {'A_bal_soil' if has_bal else '0'} = {f3(weights.get('A_overhang_soil', 0.0))} + {f3(weights.get('A_bal_soil', 0.0))} = {f3(weights.get('A_ground_live', 0.0))} m²")
-            add_text_paragraph(f"(20) 地面活荷载重量 G_ground_live = A_ground_live × ground_live_load = {f3(weights.get('A_ground_live', 0.0))} × {f3(ground_live_load)} = {f3(weights.get('G_ground_live', 0.0))} kN")
-            add_text_paragraph(f"(21) 抗浮总重量 G_total = G_self + G_bal + G_soil_overhang + G_soil_bal + G_roof_live + G_ground_live = {f3(weights.get('G_self', 0.0))} + {f3(weights.get('G_bal', 0.0))} + {f3(weights.get('G_soil_overhang', 0.0))} + {f3(weights.get('G_soil_bal', 0.0))} + {f3(weights.get('G_roof_live', 0.0))} + {f3(weights.get('G_ground_live', 0.0))} = {f3(weights.get('G_total', 0.0))} kN")
+            add_text_paragraph(f"(18) 抗浮总重量 G_total = G_self + G_bal + G_soil_overhang + G_soil_bal = {f3(weights.get('G_self', 0.0))} + {f3(weights.get('G_bal', 0.0))} + {f3(weights.get('G_soil_overhang', 0.0))} + {f3(weights.get('G_soil_bal', 0.0))} = {f3(weights.get('G_total', 0.0))} kN")
             add_text_paragraph(f"(19) 满水重量 G_water_full = L × W × H_in × gamma_water = {f3(L)} × {f3(W)} × {f3(geometry.get('H_in', 0.0))} × {f3(gamma_water)} = {f3(weights.get('G_water_full', 0.0))} kN")
             add_text_paragraph(f"(20) 实际水深重量 G_water_actual = L × W × h_water_actual × gamma_water = {f3(L)} × {f3(W)} × {f3(geometry.get('h_water_actual', 0.0))} × {f3(gamma_water)} = {f3(weights.get('G_water_actual', 0.0))} kN")
             add_text_paragraph(f"(21) 满水工况安全系数 K_full = (G_total + G_water_full) ÷ F_buoy = ({f3(weights.get('G_total', 0.0))} + {f3(weights.get('G_water_full', 0.0))}) ÷ {f3(weights.get('F_buoy', 0.0))} = {f3(checks.get('K_full', 0.0))}，要求 ≥ {f3(checks.get('req_full', 0.0))}")
